@@ -1,0 +1,21 @@
+# jupyter notebooks.
+*.ipynb
+*.npy
+*.json
+.ipynb_checkpoints/
+# Rhistory
+.Rhistory
+# result folders
+td results/
+value iter results/
+deepQN results/
+DRQN results/
+a3c results/
+rayrllib results/
+figures/ 
+pomdp/
+.vscode/
+# Ignore Python cache files and directories
+__pycache__/
+*.pyc
+*.pyo
