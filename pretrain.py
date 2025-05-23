@@ -21,7 +21,7 @@ def pretrain(env, nq, memory, max_steps, batch_size, PrioritizedReplay, max_prio
             t = 0
             termination_t = 0
         # Make a random action
-        action = np.random.randint(0, env.actionspace_dim[0])
+        action = np.random.choice(np.flatnonzero(env._compute_mask()))
         true_state = env.state
         reward, done, _ = env.step(action)
 

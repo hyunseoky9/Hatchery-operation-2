@@ -431,7 +431,7 @@ class Hatchery3_1:
                 N1_next = np.minimum((N0+N1)*np.exp(-215*M1)*((1-delfall) + self.tau*delfall + (1 - self.tau)*self.r1*self.phifall),np.ones(self.n_reach)*self.N1minmax[1])
                 # hatchery stuff
                 needed = a/(np.dot(self.b,self.fc)) # amount of f0 needed to produce 'a' fish
-                Nh_next = a 
+                Nh_next = a + 10 # added 10 so that there's no small discrepancy that doesn't allow stocking the produced amount in the fall.
                 if any(Nc - needed*self.b < 0):
                     newb = self.b.copy()
                     left = a
@@ -441,7 +441,7 @@ class Hatchery3_1:
                         negidx = np.where(diff < 0)[0]
                         Nc_next[negidx] = 0
                         if all(Nc_next == 0):
-                            Nh_next = np.sum(Nc*self.fc)
+                            Nh_next = np.sum(Nc*self.fc) + 10
                             newb = np.zeros(self.n_cohorts)
                             break
                         left = left - np.sum(Nc[negidx]*self.fc[negidx])
@@ -451,7 +451,7 @@ class Hatchery3_1:
                     Nc_next = Nc_next - needed*newb     
                 else:
                     Nc_next = np.maximum(Nc - a/(np.dot(self.b,self.fc))*self.b,0)
-                Nc0_next = np.random.uniform(size=1)*self.eggcollection_max*self.s0egg + np.random.uniform(size=1)*self.larvaecollection_max*self.s0larvae
+                Nc0_next = (np.random.uniform(size=1)*self.eggcollection_max*self.s0egg + np.random.uniform(size=1)*self.larvaecollection_max*self.s0larvae)/2 # Nc is the number of females so it's divided by 2. hatchery uses 1:1 sex ratio for production.
                 # hydrological stuff. No springflow in fall (stays the same)
                 # genetic stuff (reproduction and summer survival impact on allele frequency)
                 p_next = []
@@ -486,7 +486,7 @@ class Hatchery3_1:
                 het_perloci = p_next[np.arange(0,self.n_genotypes*self.n_locus,self.n_genotypes) + 1]
                 G_next = [np.mean(het_perloci)] # heterozygosity in the population
                 # reward & done
-                reward = self.extant - self.prodcost + prodpenalty if a > 0 else self.extant
+                reward = self.extant - self.prodcost if a > 0 else self.extant
                 done = False
                 # update state & obs
                 if self.discset == -1:
@@ -537,6 +537,7 @@ class Hatchery3_1:
                     # reward & done
                     reward = 0
                     done = True
+                    print("Invalid action choice. Terminating the episode.")
                 # hydrological stuff
                 q_next = q # no springflow in fall (stays the same)
                 qhat_next = qhat # no springflow in fall (stays the same)
@@ -600,7 +601,7 @@ class Hatchery3_1:
                     # reward & done
                     reward = 0
                     done = True
-
+                    print("Invalid action choice. Terminating the episode.")
                 # hydrological stuff
                 q_next, qhat_next = self.flowmodel.nextflowNforecast(q) # springflow and forecast in spring
                 q_next = q_next[0][0]
@@ -1048,14 +1049,21 @@ class Hatchery3_1:
         ph_next = ph_next_tensor.flatten()
         return ph_next
 
-    def comput_mask(self):
+    def _compute_mask(self,states=None):
         """Return 1/0 vector of length N_ACTIONS indicating legal choices."""
+        if states is None:
+            states = np.array(self.obs).reshape(1,-1)
+        springidx = states[:,self.oidx['Ot'][0]] == 0
+        fallidx = ~springidx
+        mask = np.zeros((states.shape[0], len(self.actions['a'])), dtype=int)
         # in spring, you can't produce more than what the broodstock size can produce
-        if self.state[self.sidx['t'][0]] == 0:
-            cohorts = np.array(self.state)[self.sidx['Nc']]
-            max_production = np.sum(cohorts*self.b*self.fc)
-            legal = self.actions['a'] < max_production
-            return legal.astype(int)
-        else: # in fall, you cannot stock more than what's in the hatchery.
-            legal = self.actions['a'] < np.exp(self.state[self.sidx['logNh'][0]]) if self.discset == -1 else self.actions['a'] < self.states['Nh'][self.state[self.sidx['Nh'][0]]]
-            return legal.astype(int)
+        if np.sum(springidx) > 0:
+            cohorts = np.atleast_2d(np.exp(states[np.ix_(np.flatnonzero(springidx),self.oidx['OlogNc'])])-1)
+            max_production = np.sum((cohorts*self.b*self.fc), axis=1)
+            springlegal = max_production[:,None] >= self.actions['a']
+            mask[springidx] = springlegal
+        if np.sum(fallidx) > 0: # in fall, you cannot stock more than what's in the hatchery.
+            hatchery = np.atleast_2d(np.exp(states[np.ix_(np.flatnonzero(fallidx),self.oidx['OlogNh'])]))
+            falllegal = hatchery - 1 >= self.actions['a']
+            mask[fallidx] = falllegal
+        return mask.astype(int)

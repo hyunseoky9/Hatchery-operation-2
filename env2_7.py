@@ -416,3 +416,6 @@ class Env2_7:
                     Qsub[a][i,j] = Q[stateid,a]
 
         return Qsub
+
+    def _compute_mask(self,states=None):
+        return np.ones(self.actionspace_dim[0])

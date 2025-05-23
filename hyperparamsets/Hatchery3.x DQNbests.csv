@@ -32,7 +32,7 @@ postterm_len,3,3,3,3,3,3,3,3,3
 normalize,0,0,0,0,0,0,0,0,0
 bestQinit,0,0,0,0,0,0,0,0,0
 actioninput,0,0,0,0,0,0,0,0,0
-performance_sampleN,1000,1000,1000,1000,1000,1000,1000,10,1000
+performance_sampleN,1000,1000,1000,20,1000,1000,1000,10,1000
 final_performance_sampleN,1000,1000,1000,1000,1000,1000,1000,10,1000
 calc_MSE,0,0,0,0,0,0,0,0,0
 evaluation_interval,1000,1000,1000,1000,1000,1000,1000,100,1000
@@ -41,5 +41,5 @@ envconfig,"{'init':None,'paramset':1,'discretization':-1,'LC':1,'genetics':[0,0]
 seed,744185,random,random,random,12,random,random,11111,random
 framestacking,1,1,1,1,1,1,1,2,1
 min_MSE,na,1,na,na,na,na,na,na,na
-note,first hatchery env running,first hatchery env running,first hatchery 3.1 run,first hatchery 3.1 run,env2.4 (discretization2) performing well,"env2.5 with log-transformed y. good seeds: 958486, 688912, 764979",env2.6 with the same paramset for 2.4 & 2.5. working seed:74400,dummy set,first attempt at solving env2.7
-score,,,,4900,4600,,,0,
+note,first hatchery env running,first hatchery env running,first hatchery 3.1 run,na,env2.4 (discretization2) performing well,"env2.5 with log-transformed y. good seeds: 958486, 688912, 764979",env2.6 with the same paramset for 2.4 & 2.5. working seed:74400,dummy set,first attempt at solving env2.7
+score,,,,na,4600,,,0,

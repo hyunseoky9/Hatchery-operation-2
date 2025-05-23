@@ -265,15 +265,15 @@ def Rainbow2(env,paramdf, meta):
         stack = S*fstack # set stack
         previous_a = 0
         done = False
-        
         t = 0 # timestep num
         termination_t = 0 
         while done == False:
             prev_a = previous_a if actioninput else None
+            mask = env._compute_mask()
             if t > 0:
-                a = choose_action(stack, Q, ep, action_size,distributional,device,False,None,prev_a)
+                a = choose_action(stack, Q, ep, action_size,distributional,device,False,None,prev_a,mask)
             else:
-                a = random.randint(0, action_size-1) # first action in the episode is random for added exploration
+                a = np.random.choice(np.flatnonzero(mask)) # first action in the episode is random for added exploration
             true_state = env.state
             reward, done, _ = env.step(a) # take a step
             if env.episodic == False and env.absorbing_cut == True: # if continuous task and absorbing state is defined
@@ -306,6 +306,7 @@ def Rainbow2(env,paramdf, meta):
                     states, actions, rewards, next_states, dones, previous_actions = memory.sample(batch_size)
                     weights = np.ones(batch_size)
                     actions = torch.tensor(actions, dtype=torch.int64).to(device)
+                nextmasks = torch.tensor(env._compute_mask(next_states), dtype=torch.float32).to(device)
                 states = torch.tensor(states, dtype=torch.float32).to(device)
                 rewards = torch.tensor(rewards, dtype=torch.float32).to(device)
                 next_states = torch.tensor(next_states, dtype=torch.float32).to(device)
@@ -326,23 +327,27 @@ def Rainbow2(env,paramdf, meta):
                         with torch.no_grad():
                             action_Qs = Q(next_states)
                         next_EQ = torch.sum(action_Qs * Q.z, dim=-1)  # Expected Q-values for each action
-                        best_actions = torch.argmax(next_EQ, dim=-1).unsqueeze(1)  # Best action                        
+                        next_EQ = next_EQ + (1 - nextmasks)*-1e10 # mask
+                        best_actions = torch.argmax(next_EQ, dim=-1).unsqueeze(1)  # Best action
                         targets = compute_target_distribution(rewards, dones, gamma, nstep, target_Qs, best_actions, Q.z, atomn, Vmin, Vmax)
                     else:
                         if dones.any():
                             target_Qs[episode_ends] = torch.zeros(action_size, device=device)
                         with torch.no_grad():
                             action_Qs = Q(next_states)
+                        action_Qs = action_Qs + ((1 - nextmasks)*-1e10) # mask
                         next_actions = torch.argmax(action_Qs, dim=1)
                         targets = rewards + (gamma**nstep) * target_Qs.gather(1, next_actions.unsqueeze(1)).squeeze(1)
                 else:
                     if distributional:
                         next_EQ = torch.sum(target_Qs * Q.z, dim=-1)  # Expected Q-values for each action
+                        next_EQ = next_EQ + (1 - nextmasks)*-1e10 # mask
                         best_actions = torch.argmax(next_EQ, dim=-1).unsqueeze(1)  # Best action
                         targets = compute_target_distribution(rewards, dones, gamma, nstep, target_Qs, best_actions, Q.z, atomn, Vmin, Vmax)
                     else:
                         if dones.any():
                             target_Qs[episode_ends] = torch.zeros(action_size, device=device)
+                        target_Qs = target_Qs + (1 - nextmasks)*-1e10 # mask
                         targets = rewards + (gamma**nstep) * torch.max(target_Qs, dim=1)[0]
                 td_error = train_model(Q, states, actions, targets, weights, device)
 

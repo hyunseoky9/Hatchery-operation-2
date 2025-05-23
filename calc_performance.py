@@ -47,7 +47,8 @@ def calc_performance(env, device, seed, configdict, Q=None, policy=None, episode
             if Q is not None:
                 prev_a = previous_action if actioninput else None
                 if drqn == True: #DRQN
-                    action, hx = choose_action(state,Q,0,action_size,distributional,device, drqn, hx, prev_a)
+                    mask = env._compute_mask()
+                    action, hx = choose_action(state,Q,0,action_size,distributional,device, drqn, hx, prev_a, mask)
                     if env.envID == 'tiger':
                         if action == 1:
                             managed = 1
@@ -56,7 +57,8 @@ def calc_performance(env, device, seed, configdict, Q=None, policy=None, episode
                     elif env.envID in ['Env2.0','Env2.1','Env2.2','Env2.3','Env2.4','Env2.5','Env2.6','Hatchery3.0','Hatchery3.1']:
                         actiondist[action] += 1
                 else: # DQN
-                    action = choose_action(stack,Q,0,action_size,distributional,device, drqn, hx, prev_a)
+                    mask = env._compute_mask()
+                    action = choose_action(stack,Q,0,action_size,distributional,device, drqn, hx, prev_a, mask)
                     if env.envID in ['Env2.0','Env2.1','Env2.2','Env2.3','Env2.4','Env2.5','Env2.6','Hatchery3.0','Hatchery3.1']:
                         actiondist[action] += 1
                 # * state increase in size by 1 due to adding previous action in choose_action, but it will get overwritten in the next iteration
