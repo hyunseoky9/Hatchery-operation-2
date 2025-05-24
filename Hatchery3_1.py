@@ -430,13 +430,13 @@ class Hatchery3_1:
                 N0_next = np.minimum(P*np.exp(-124*M0)*((1 - delfall) + self.tau*deldiff + (1 - self.tau)*self.r0*self.phidiff),np.ones(self.n_reach)*self.N0minmax[1])
                 N1_next = np.minimum((N0+N1)*np.exp(-215*M1)*((1-delfall) + self.tau*delfall + (1 - self.tau)*self.r1*self.phifall),np.ones(self.n_reach)*self.N1minmax[1])
                 # hatchery stuff
-                needed = a/(np.dot(self.b,self.fc)) # amount of f0 needed to produce 'a' fish
+                needed = 2*a/(np.dot(self.b,self.fc)) # amount of f0 needed to produce 'a' fish
                 Nh_next = a + 10 # added 10 so that there's no small discrepancy that doesn't allow stocking the produced amount in the fall.
-                if any(Nc - needed*self.b < 0):
+                if np.any(Nc - needed*self.b < 0):
                     newb = self.b.copy()
                     left = a
                     Nc_next = Nc.copy()
-                    while any((Nc_next - needed*newb) < 0):
+                    while np.any((Nc_next - needed*newb) < 0):
                         diff = Nc_next - needed*newb # difference between Nc and the amount of fish needed fro producing 'a'.
                         negidx = np.where(diff < 0)[0]
                         Nc_next[negidx] = 0
@@ -444,14 +444,14 @@ class Hatchery3_1:
                             Nh_next = np.sum(Nc*self.fc) + 10
                             newb = np.zeros(self.n_cohorts)
                             break
-                        left = left - np.sum(Nc[negidx]*self.fc[negidx])
+                        left = left - np.sum(Nc[negidx]*self.fc[negidx])/2 # divided by 2 because 1:1 male to female is used for production.
                         newb[negidx] = 0
                         newb = newb/np.sum(newb)
-                        needed = left/(np.dot(newb,self.fc))*newb
+                        needed = 2*left/(np.dot(newb,self.fc))*newb
                     Nc_next = Nc_next - needed*newb     
                 else:
                     Nc_next = np.maximum(Nc - a/(np.dot(self.b,self.fc))*self.b,0)
-                Nc0_next = (np.random.uniform(size=1)*self.eggcollection_max*self.s0egg + np.random.uniform(size=1)*self.larvaecollection_max*self.s0larvae)/2 # Nc is the number of females so it's divided by 2. hatchery uses 1:1 sex ratio for production.
+                Nc0_next = np.random.uniform(size=1)*self.eggcollection_max*self.s0egg + np.random.uniform(size=1)*self.larvaecollection_max*self.s0larvae # Nc is the number of females so it's divided by 2. hatchery uses 1:1 sex ratio for production.
                 # hydrological stuff. No springflow in fall (stays the same)
                 # genetic stuff (reproduction and summer survival impact on allele frequency)
                 p_next = []
@@ -464,15 +464,15 @@ class Hatchery3_1:
                     gfreq = p[idx1:idx2] # genotype frequency for locus l
                     allelefreq = np.array([gfreq[0]+1/2*gfreq[1],1-(gfreq[0]+1/2*gfreq[1])]) # allele frequency for locus l
                     pprime = np.array([allelefreq[0]**2,2*allelefreq[0]*allelefreq[1],allelefreq[1]**2]) # genotype frequency of the next generation assuming HW eqbm.
-                    Xp = np.random.multinomial(np.sum(N0_next),pprime) if np.sum(N0_next) < 1e4 else np.round(np.sum(N0_next)*pprime) # Xp is the number of individuals in the age0 population for each genotype, if the number of alleles (2N0) is larger than 10000, just use the expected values.
-                    Yp = np.random.multinomial(np.sum(N1_next),gfreq) if np.sum(N1_next) < 1e4 else np.round(np.sum(N1_next)*gfreq) # Yp is the number of individuals in the age1 population for each genotype
+                    Xp = np.random.multinomial(np.sum(N0_next).astype(int),pprime) if np.sum(N0_next) < 1e4 else np.round(np.sum(N0_next)*pprime) # Xp is the number of individuals in the age0 population for each genotype, if the number of alleles (2N0) is larger than 10000, just use the expected values.
+                    Yp = np.random.multinomial(np.sum(N1_next).astype(int),gfreq) if np.sum(N1_next) < 1e4 else np.round(np.sum(N1_next)*gfreq) # Yp is the number of individuals in the age1 population for each genotype
                     p_next_perlocus = (Xp + Yp)/np.sum(Xp+Yp) # allele frequency in the population
                     p_next.append(p_next_perlocus)
                     # hatchery genotype frequency
-                    Xpprime = np.random.multinomial(Nc0_next,pprime) if Nc0_next < 1e4 else np.round(Nc0_next*pprime) # Xpprime is the number individuals in the collected eggs/juv's for each genotype
+                    Xpprime = np.random.multinomial(int(Nc0_next),pprime) if Nc0_next < 1e4 else np.round(Nc0_next*pprime) # Xpprime is the number individuals in the collected eggs/juv's for each genotype
                     ph0_next_perlocus = Xpprime/np.sum(Xpprime) if np.sum(Xpprime) > 0 else np.zeros(self.n_genotypes) # genotype frequency in the hatchery
                     ph0_next.append(ph0_next_perlocus)
-                    Xppprime = np.array([np.random.multinomial(n, pvals) if n < 1e4 else np.round(n*pvals) for n, pvals in zip(Nc_next, phtensor[l])]) # (cohort, genotype)
+                    Xppprime = np.array([np.random.multinomial(int(n), pvals) if n < 1e4 else np.round(int(n)*pvals) for n, pvals in zip(Nc_next, phtensor[l])]) # (cohort, genotype)
                     Xppprime_sum = np.sum(Xppprime,axis=1) # (cohort, 1)
                     Xppprime_sum[Xppprime_sum == 0] = 1 # if the sum of genotype frequency is 0, set it to 1.
                     ph_next_perlocus = Xppprime/(Xppprime_sum.reshape(-1,1)) # (cohort, genotype)
@@ -585,7 +585,7 @@ class Hatchery3_1:
                     p_next = []
                     for l in range(self.n_locus):
                         idx1,idx2 = int(l*self.n_genotypes), int((l+1)*self.n_genotypes)
-                        Zp = np.random.multinomial(np.sum(N0_next) + np.sum(N1_next),p_prime[idx1:idx2]) if (np.sum(N0_next) + np.sum(N1_next)) < 1e4 else np.round((np.sum(N0_next) + np.sum(N1_next))*p_prime[idx1:idx2]) # Zp is the number of alleles in the age0 population after winter survival
+                        Zp = np.random.multinomial(int(np.sum(N0_next) + np.sum(N1_next)),p_prime[idx1:idx2]) if (np.sum(N0_next) + np.sum(N1_next)) < 1e4 else np.round((np.sum(N0_next) + np.sum(N1_next))*p_prime[idx1:idx2]) # Zp is the number of alleles in the age0 population after winter survival
                         p_next_perlocus = Zp/np.sum(Zp) # allele frequency in the population
                         p_next.append(p_next_perlocus)
                     p_next = np.concatenate(p_next)
@@ -630,7 +630,7 @@ class Hatchery3_1:
                     Nc0_next_idx = [self._discretize_idx(Nc0_next, self.states['Nc0'])]
                     q_next_idx = [self._discretize_idx(q_next, self.states['q'])]
                     qhat_next_idx = [self._discretize_idx(qhat_next, self.observations['qhat'])]
-                    p_next_idx = self.genotype_freq_discretize(p_next.reshape(self.n_locus, self.n_alleles))
+                    p_next_idx = self.genotype_freq_discretize(p_next.reshape(self.n_locus, self.n_genotypes))
                     ph_next_idx = np.concatenate([np.array(self.states['ph0'])[np.array(self.state)[self.sidx['ph0']]],np.array(self.states['ph'])[np.array(self.state)[self.sidx['ph'][0:self.n_alleles*(self.n_cohorts-1)]]]])
                     ph0_next_idx = ph0_next.astype(int)
                     G_next_idx = [self._discretize_idx(np.mean(het_perloci), self.states['G'])]
@@ -1009,14 +1009,14 @@ class Hatchery3_1:
         """
         #phtensor = np.transpose(ph.reshape(self.n_cohorts, self.n_locus, self.n_genotypes),(1,2,0))
         phtensor = np.transpose(ph.reshape(self.n_cohorts, self.n_locus, self.n_genotypes),(1,0,2)) # dim: (self.n_locus, self.n_cohort, self.n_genotype)
-        Nb = np.round(a/np.dot(self.b, self.fc)*self.b) # number of fish used for production from each cohort.
+        Nb = np.round(2*a/np.dot(self.b, self.fc)*self.b) # number of fish used for production from each cohort.
         pc = []
         for l in range(self.n_locus):
-            K = np.array([np.random.multinomial(n, pvals) for n, pvals in zip(Nb, phtensor[l])]) # (cohort, genotype)
+            K = np.array([np.random.multinomial(int(n), pvals) for n, pvals in zip(Nb, phtensor[l])]) # (cohort, genotype)
             K_sum = np.sum(K,axis=1)
             K_sum[K_sum == 0] = 1
             pc_p = K/(K_sum.reshape(-1,1)) # (genotype, cohort); genotype frequency of broodstock selected for breeding from each cohort
-            Kp = np.array([np.random.multinomial(n, pvals) if n < 1e4 else np.round(n*pvals)  for n, pvals in zip(Nb*self.fc*self.irphi, pc_p)]) # (cohort, genotype); genotype frequency of F1 from each cohort selected for breeding
+            Kp = np.array([np.random.multinomial(int(n), pvals) if n < 1e4 else np.round(n*pvals)  for n, pvals in zip(Nb*self.fc*self.irphi, pc_p)]) # (cohort, genotype); genotype frequency of F1 from each cohort selected for breeding
             pc_perloci = np.sum(Kp,axis=0)/(np.dot(Nb,self.fc)*self.irphi) # (genotype) genotype frequency of F1.
             pc_perloci = pc_perloci/np.sum(pc_perloci) # normalize to make sure each locus' genotype frequency sums to 1
             pc.append(pc_perloci)
@@ -1038,8 +1038,8 @@ class Hatchery3_1:
         ph_next = []
         for l in range(self.n_locus):
             idx1,idx2 = int(l*self.n_genotypes), int((l+1)*self.n_genotypes)
-            Zp = np.array([np.random.multinomial(n, pvals) if n < 1e4 else np.round(n*pvals) for n, pvals in zip(Ncnext[1::],phtensor[l])]) # (cohort, genotype)
-            Zp0 = np.random.multinomial(Ncnext[0],ph0[idx1:idx2]) if Ncnext[0] < 1e4 else np.round(Ncnext[0]*ph0[idx1:idx2]) # (genotype)
+            Zp = np.array([np.random.multinomial(int(n), pvals) if n < 1e4 else np.round(n*pvals) for n, pvals in zip(Ncnext[1::],phtensor[l])]) # (cohort, genotype)
+            Zp0 = np.random.multinomial(int(Ncnext[0]),ph0[idx1:idx2]) if Ncnext[0] < 1e4 else np.round(Ncnext[0]*ph0[idx1:idx2]) # (genotype)
             Zp = np.vstack((Zp0,Zp)) # (genotype, cohort) 
             Zp_sum = np.sum(Zp,axis=1)
             Zp_sum[Zp_sum == 0] = 1
