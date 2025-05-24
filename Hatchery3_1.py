@@ -107,6 +107,7 @@ class Hatchery3_1:
         self.pminmax = [0,1]
         self.phminmax = [0,1]
         self.ph0minmax = [0,1]
+        self.pcminmax = [0,1]
         self.Gminmax = [0, 1]
         self.tminmax = [0,3]
         self.qhatminmax = [self.flowmodel.flowmin[0] + self.flowmodel.bias_95interval[0], self.flowmodel.flowmax[0] + self.flowmodel.bias_95interval[1]] # springflow estimate in otowi
@@ -121,10 +122,11 @@ class Hatchery3_1:
         self.p_dim = (self.n_genotypes, self.n_locus)
         self.ph_dim = (self.n_genotypes, self.n_locus, self.n_cohorts)
         self.ph0_dim = (self.n_genotypes, self.n_locus)
+        self.pc_dim = (self.n_genotypes, self.n_locus)
         self.G_dim = (1)
         self.t_dim = (1)
         self.qhat_dim = (1)
-        self.statevar_dim = (self.N0_dim, self.N1_dim, self.Nh_dim, self.Nc_dim, self.Nc0_dim, self.q_dim, np.prod(self.p_dim), np.prod(self.ph_dim), np.prod(self.ph0_dim), self.G_dim, self.t_dim)
+        self.statevar_dim = (self.N0_dim, self.N1_dim, self.Nh_dim, self.Nc_dim, self.Nc0_dim, self.q_dim, np.prod(self.p_dim), np.prod(self.ph_dim), np.prod(self.ph0_dim), np.prod(self.pc_dim), self.G_dim, self.t_dim)
         self.obsvar_dim = (self.N0_dim, self.N1_dim, self.Nh_dim, self.Nc_dim, self.Nc0_dim, self.qhat_dim, self.G_dim, self.t_dim)
 
         # starting 3.0, discretization for discrete variables and ranges for continuous variables will be defined in a separate function, state_discretization.
@@ -191,7 +193,7 @@ class Hatchery3_1:
         if initstate[-1] == -1:
             season  = np.random.choice([0,1]).astype(int) # only start from spring or fall angostura stocking.
         else:
-            season = initstate[10].astype(int)
+            season = initstate[-1].astype(int)
 
         if season == 0: # spring
             # N0 & ON0
@@ -275,6 +277,12 @@ class Hatchery3_1:
                 new_state.append(ph0val)
             else:
                 new_state.append(initstate[6])
+            # pc
+            if initstate[9] == -1:
+                pcval = list(np.zeros(self.n_genotypes*self.n_locus).astype(int))
+                new_state.append(pcval)
+            else:
+                new_state.append(initstate[7])
         else: # fall
             # N0 & ON0
             N0val, N1val = self.init_pop_sampler()
@@ -365,6 +373,12 @@ class Hatchery3_1:
                 new_state.append(ph0val)
             else:
                 new_state.append(initstate[6])
+            # pc
+            if initstate[9] == -1:
+                pcval = self.init_genotype_freq_sampler()
+                new_state.append(pcval)
+            else:
+                new_state.append(initstate[7])
         # G & OG
         het_perloci = np.array(pval)[np.arange(0,self.n_genotypes*self.n_locus,self.n_genotypes) + 1]
         if self.discset == -1:
@@ -659,6 +673,7 @@ class Hatchery3_1:
                 "p": list(np.linspace(self.pminmax[0], self.pminmax[1], 11)), # genotype frequency (n_genotype)             
                 "ph": list(np.linspace(self.phminmax[0], self.phminmax[1], 11)), # age1+ hatchery genotype frequency (n_genotype,n_cohorts)
                 "ph0": list(np.linspace(self.ph0minmax[0], self.ph0minmax[1], 11)), # age0 hatchery allele frequency  (n_genotype)
+                "pc": list(np.linspace(self.pcminmax[0], self.pcminmax[1], 11)), # age0 hatchery allele frequency  (n_genotype)
                 "G": list(np.linspace(self.Gminmax[0], self.Gminmax[1], 11)), # heterozygosity (1)
                 "t": list(np.arange(self.tminmax[0], self.tminmax[1] + 1, 1)), # time (1)
             }
@@ -687,6 +702,7 @@ class Hatchery3_1:
                 "p": self.pminmax, # genotype frequency (n_genotype)
                 "ph": self.phminmax, # age1+ hatchery genotype frequency (n_genotype,n_cohorts)
                 "ph0": self.ph0minmax, # age0 hatchery genotype frequency  (n_genotype)
+                "pc": self.pcminmax, # age0 hatchery genotype frequency  (n_genotype)
                 "G": self.Gminmax, # heterozygosity (1)
                 "t": self.tminmax # time (1)
             }
