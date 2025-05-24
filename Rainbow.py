@@ -360,6 +360,7 @@ def Rainbow(env,paramdf, meta):
                 
             t += 1 # update timestep
             j += 1 # update training cycle
+        
         # beta update for prioritized replay
         if PrioritizedReplay: 
             beta += (1.0 - beta0)/num_episodes
