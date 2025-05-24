@@ -601,6 +601,8 @@ def train_model(Q, states, actions, targets, weights, device):
 
     # Backpropagation
     loss.backward()
+    # gradient clipping
+    totalnorm = torch.nn.utils.clip_grad_norm_(Q.parameters(), max_norm=10.0)
     Q.optimizer.step()
     Q.optimizer.zero_grad()
     return td_errors
