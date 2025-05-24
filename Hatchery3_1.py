@@ -407,6 +407,7 @@ class Hatchery3_1:
             p = np.array(self.state)[self.sidx["p"]]
             ph = np.array(self.state)[self.sidx["ph"]]
             ph0 = np.array(self.state)[self.sidx["ph0"]]
+            pc = np.array(self.state)[self.sidx["pc"]]
             G = np.array(self.state)[self.sidx["G"]]
             t = np.array(self.state)[self.sidx['t']].astype(int)
             qhat = np.exp(np.array(self.obs)[self.oidx['logqhat']]) - 1
@@ -420,6 +421,7 @@ class Hatchery3_1:
             p = np.array(self.states['p'])[np.array(self.state)[self.sidx['p']]]
             ph = np.array(self.states['ph'])[np.array(self.state)[self.sidx['ph']]]
             ph0 = np.array(self.states['ph0'])[np.array(self.state)[self.sidx['ph0']]]
+            pc = np.array(self.states['pc'])[np.array(self.state)[self.sidx['pc']]]
             G = np.array(self.states['G'])[np.array(self.state)[self.sidx['G']]]
             t = np.array(self.states['t'])[np.array(self.state)[self.sidx['t']]]
             qhat = np.array(self.observations['qhat'])[np.array(self.obs)[self.oidx['qhat']]]
@@ -450,27 +452,33 @@ class Hatchery3_1:
                     newb = self.b.copy()
                     left = a
                     Nc_next = Nc.copy()
+                    Nb = np.zeros(self.n_cohorts) # amount of fish used for production from each cohort.
                     while np.any((Nc_next - needed*newb) < 0):
                         diff = Nc_next - needed*newb # difference between Nc and the amount of fish needed fro producing 'a'.
                         negidx = np.where(diff < 0)[0]
+                        Nb[negidx] = Nc_next[negidx]
                         Nc_next[negidx] = 0
                         if all(Nc_next == 0):
-                            Nh_next = np.sum(Nc*self.fc) + 10
+                            Nh_next = np.sum(Nc/2*self.fc) + 10
                             newb = np.zeros(self.n_cohorts)
+                            Nb = Nc.copy()
                             break
                         left = left - np.sum(Nc[negidx]*self.fc[negidx])/2 # divided by 2 because 1:1 male to female is used for production.
                         newb[negidx] = 0
                         newb = newb/np.sum(newb)
                         needed = 2*left/(np.dot(newb,self.fc))*newb
                     Nc_next = Nc_next - needed*newb     
+                    Nb += needed*newb
                 else:
-                    Nc_next = np.maximum(Nc - a/(np.dot(self.b,self.fc))*self.b,0)
+                    Nc_next = np.maximum(Nc - 2*a/(np.dot(self.b,self.fc))*self.b,0)
+                    Nb = needed*self.b # amount of fish used for production from each cohort.
                 Nc0_next = np.random.uniform(size=1)*self.eggcollection_max*self.s0egg + np.random.uniform(size=1)*self.larvaecollection_max*self.s0larvae # Nc is the number of females so it's divided by 2. hatchery uses 1:1 sex ratio for production.
                 # hydrological stuff. No springflow in fall (stays the same)
                 # genetic stuff (reproduction and summer survival impact on allele frequency)
                 p_next = []
                 ph0_next = []
                 ph_next = []
+                pc_next = []
                 phtensor = np.transpose(ph.reshape(self.n_cohorts, self.n_locus, self.n_genotypes),(1,0,2)) # dim: (self.n_locus, self.n_cohorts, self.n_genotypes)
                 for l in range(self.n_locus):
                     # wild  genotype frequency
@@ -482,7 +490,16 @@ class Hatchery3_1:
                     Yp = np.random.multinomial(np.sum(N1_next).astype(int),gfreq) if np.sum(N1_next) < 1e4 else np.round(np.sum(N1_next)*gfreq) # Yp is the number of individuals in the age1 population for each genotype
                     p_next_perlocus = (Xp + Yp)/np.sum(Xp+Yp) # allele frequency in the population
                     p_next.append(p_next_perlocus)
-                    # hatchery genotype frequency
+                    # stock fish genotype frequency
+                    K = np.array([np.random.multinomial(int(n), pvals) for n, pvals in zip(Nb, phtensor[l])]) # (cohort, genotype)
+                    K_sum = np.sum(K,axis=1)
+                    K_sum[K_sum == 0] = 1 # if the sum of genotype frequency is 0, set it to 1.
+                    pc_p = K/(K_sum.reshape(-1,1))
+                    Kp = np.array([np.random.multinomial(int(n), pvals) if n < 1e4 else np.round(n*pvals)  for n, pvals in zip(np.round(Nb)*self.fc*self.irphi, pc_p)]) # (cohort, genotype); genotype frequency of F1 from each cohort selected for breeding. We account for irphi (immediate death after stocking) here in advance.
+                    pc_perloci = np.sum(Kp,axis=0)/(np.dot(Nb,self.fc)*self.irphi) # (genotype) genotype frequency of F1.
+                    pc_perloci = pc_perloci/np.sum(pc_perloci) # normalize to make sure each locus' genotype frequency sums to 1
+                    pc_next.append(pc_perloci)
+                    # broodstock genotype frequency
                     Xpprime = np.random.multinomial(int(Nc0_next),pprime) if Nc0_next < 1e4 else np.round(Nc0_next*pprime) # Xpprime is the number individuals in the collected eggs/juv's for each genotype
                     ph0_next_perlocus = Xpprime/np.sum(Xpprime) if np.sum(Xpprime) > 0 else np.zeros(self.n_genotypes) # genotype frequency in the hatchery
                     ph0_next.append(ph0_next_perlocus)
@@ -496,6 +513,8 @@ class Hatchery3_1:
                 ph_next = ph_next_tensor.flatten()
                 p_next = np.concatenate(p_next)
                 ph0_next = np.concatenate(ph0_next)
+                pc_next = np.concatenate(pc_next)
+            
                 # calculate heterozygosity
                 het_perloci = p_next[np.arange(0,self.n_genotypes*self.n_locus,self.n_genotypes) + 1]
                 G_next = [np.mean(het_perloci)] # heterozygosity in the population
@@ -510,7 +529,7 @@ class Hatchery3_1:
                     logNc_next = np.log(Nc_next+1)
                     logNc0_next = np.log(Nc0_next+1)
                     OG_next = np.array(self.obs)[self.oidx['OG']] # no change 
-                    self.state = list(np.concatenate([logN0_next, logN1_next, logNh_next, logNc_next, logNc0_next, np.array(self.state)[self.sidx["logq"]], p_next, ph_next, ph0_next, G_next, t_next]))
+                    self.state = list(np.concatenate([logN0_next, logN1_next, logNh_next, logNc_next, logNc0_next, np.array(self.state)[self.sidx["logq"]], p_next, ph_next, ph0_next, pc_next, G_next, t_next]))
                     self.obs = list(np.concatenate([logN0_next, logN1_next, logNh_next, logNc_next, logNc0_next, np.array(self.obs)[self.oidx["logqhat"]], OG_next, t_next]))
                 else:
                     N0_next_idx = [self._discretize_idx(val, self.states['N0']) for val in N0_next]
@@ -522,11 +541,12 @@ class Hatchery3_1:
                     p_next_idx = self.genotype_freq_discretize(p_next.reshape(self.n_locus, self.n_genotypes))
                     ph_next_idx = np.concatenate([self.genotype_freq_discretize(ph_next_tensor[c]) for c in range(self.n_cohorts)])
                     ph0_next_idx = self.genotype_freq_discretize(ph0_next.reshape(self.n_locus, self.n_genotypes))
+                    pc_next_idx = self.genotype_freq_discretize(pc_next.reshape(self.n_locus, self.n_genotypes))
                     G_next_idx = [self._discretize_idx(np.mean(het_perloci), self.states['G'])]
                     OG_next_idx = np.array(self.obs)[self.oidx['G']] # no change 
                     t_next_idx = t_next
                     qhat_next_idx = np.array(self.obs)[self.oidx['qhat']] # no change
-                    self.state = list(np.concatenate([N0_next_idx, N1_next_idx, Nh_next_idx, Nc_next_idx, Nc0_next_idx, q_next_idx, p_next_idx, ph_next_idx, ph0_next_idx, G_next_idx, t_next_idx]).astype(int))
+                    self.state = list(np.concatenate([N0_next_idx, N1_next_idx, Nh_next_idx, Nc_next_idx, Nc0_next_idx, q_next_idx, p_next_idx, ph_next_idx, ph0_next_idx, pc_next_idx, G_next_idx, t_next_idx]).astype(int))
                     self.obs = list(np.concatenate([N0_next_idx, N1_next_idx, Nh_next_idx, Nc_next_idx, Nc0_next_idx, qhat_next_idx, OG_next_idx, t_next_idx]).astype(int))
             elif t < 3: # fall stocking for angostura or isleta
                 # demographic stuff
