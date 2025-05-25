@@ -430,6 +430,8 @@ class Hatchery3_1:
         totN0 = np.sum(N0)
         totN1 = np.sum(N1)
         totpop = totN0 + totN1
+        if t == 1 and totpop/4000 < 0.5:
+            foo = 0
         if totpop >= self.Nth:
             if t == 0: # sring
                 # demographic stuff (reproductin and summer survival)
@@ -484,21 +486,26 @@ class Hatchery3_1:
                     # wild  genotype frequency
                     idx1,idx2 = int(l*self.n_genotypes), int((l+1)*self.n_genotypes)
                     gfreq = p[idx1:idx2] # genotype frequency for locus l
-                    allelefreq = np.array([gfreq[0]+1/2*gfreq[1],1-(gfreq[0]+1/2*gfreq[1])]) # allele frequency for locus l
+                    allelefreq = np.array([gfreq[0]+1/2*gfreq[1],(gfreq[2]+1/2*gfreq[1])]) # allele frequency for locus l
                     pprime = np.array([allelefreq[0]**2,2*allelefreq[0]*allelefreq[1],allelefreq[1]**2]) # genotype frequency of the next generation assuming HW eqbm.
                     Xp = np.random.multinomial(np.sum(N0_next).astype(int),pprime) if np.sum(N0_next) < 1e5 else np.round(np.sum(N0_next)*pprime) # Xp is the number of individuals in the age0 population for each genotype, if the number of alleles (2N0) is larger than 10000, just use the expected values.
                     Yp = np.random.multinomial(np.sum(N1_next).astype(int),gfreq) if np.sum(N1_next) < 1e5 else np.round(np.sum(N1_next)*gfreq) # Yp is the number of individuals in the age1 population for each genotype
                     p_next_perlocus = (Xp + Yp)/np.sum(Xp+Yp) # allele frequency in the population
                     p_next.append(p_next_perlocus)
                     # stock fish genotype frequency
-                    K = np.array([np.random.multinomial(int(n), pvals) for n, pvals in zip(Nb, phtensor[l])]) # (cohort, genotype)
-                    K_sum = np.sum(K,axis=1)
-                    K_sum[K_sum == 0] = 1 # if the sum of genotype frequency is 0, set it to 1.
-                    pc_p = K/(K_sum.reshape(-1,1))
-                    Kp = np.array([np.random.multinomial(int(n), pvals) if n < 1e5 else np.round(n*pvals)  for n, pvals in zip(np.round(Nb)*self.fc*self.irphi, pc_p)]) # (cohort, genotype); genotype frequency of F1 from each cohort selected for breeding. We account for irphi (immediate death after stocking) here in advance.
-                    pc_perloci = np.sum(Kp,axis=0)/(np.dot(Nb,self.fc)*self.irphi) # (genotype) genotype frequency of F1.
-                    pc_perloci = pc_perloci/np.sum(pc_perloci) # normalize to make sure each locus' genotype frequency sums to 1
-                    pc_next.append(pc_perloci)
+                    if a > 0:
+                        K = np.array([np.random.multinomial(int(n), pvals) for n, pvals in zip(Nb, phtensor[l])]) # (cohort, genotype)
+                        K_sum = np.sum(K,axis=1)
+                        K_sum[K_sum == 0] = 1 # if the sum of genotype frequency is 0, set it to 1.
+                        pc_p = K/(K_sum.reshape(-1,1)) # frequency of selected broodstock for production from each cohort. (cohort, genotype)
+                        allelefreq_pc = np.array([pc_p[:,0]+1/2*pc_p[:,1],(pc_p[:,2]+1/2*pc_p[:,1])]) # allele frequency for pc_p
+                        pc_pp = np.array([allelefreq_pc[0]**2,2*allelefreq_pc[0]*allelefreq_pc[1],allelefreq_pc[1]**2]).T # genotype frequency of the F1 assuming HW eqbm.
+                        Kp = np.array([np.random.multinomial(int(n), pvals) if n < 1e5 else np.round(n*pvals)  for n, pvals in zip(np.round(Nb)*self.fc*self.irphi, pc_pp)]) # (cohort, genotype); genotype frequency of F1 from each cohort selected for breeding. We account for irphi (immediate death after stocking) here in advance.
+                        pc_perloci = np.sum(Kp,axis=0)/(np.dot(Nb,self.fc)*self.irphi) # (genotype) genotype frequency of F1.
+                        pc_perloci = pc_perloci/np.sum(pc_perloci) # normalize to make sure each locus' genotype frequency sums to 1
+                        pc_next.append(pc_perloci)
+                    else:
+                        pc_next.append(np.zeros(self.n_genotypes))
                     # broodstock genotype frequency
                     Xpprime = np.random.multinomial(int(Nc0_next),pprime) if Nc0_next < 1e5 else np.round(Nc0_next*pprime) # Xpprime is the number individuals in the collected eggs/juv's for each genotype
                     ph0_next_perlocus = Xpprime/np.sum(Xpprime) if np.sum(Xpprime) > 0 else np.zeros(self.n_genotypes) # genotype frequency in the hatchery
@@ -579,6 +586,7 @@ class Hatchery3_1:
                     Nc0_next = Nc0.copy()
                     Nc_next = Nc.copy()
                     p_next = np.zeros(self.n_genotypes*self.n_locus)
+                    pc_next = np.zeros(self.n_genotypes*self.n_locus)
                     # reward & done
                     reward = 0
                     done = True
@@ -750,7 +758,7 @@ class Hatchery3_1:
                 "Ot": states['t'],
             }
             actions = {
-                "a": list(np.linspace(self.aminmax[0], self.aminmax[1], 30)), # stocking/production size (1)
+                "a": list(np.linspace(self.aminmax[0], self.aminmax[1], 31)), # stocking/production size (1)
             }
         return {'states': states,'observations': observations,'actions': actions}
 
