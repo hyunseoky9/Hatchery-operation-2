@@ -48,8 +48,18 @@ class AR1:
         # we will prevent the prediction from going below the minimum springflow observed in the past for each gauge.
         Otowival = np.maximum(self.constants[0] + (self.phi_1 * otowispringflow + np.random.normal(0, np.sqrt(self.sigma2))), self.flowmin[0])
         Otowival = np.minimum(Otowival, self.flowmax[0])
+
+        ### pilot correction for future cliamte. max flowrate is 80% of the max flowrate.
+        Otowiratio = (Otowival - self.flowmin[0]) / (self.flowmax[0] - self.flowmin[0])
+        Otowival = Otowiratio * (self.flowmax[0]*0.5 - self.flowmin[0]) + self.flowmin[0]
+
         ABQval = Otowival + self.constants[1] - self.constants[0]
         SAval = Otowival + self.constants[2] - self.constants[0]
+
+        ### pilot correction for future cliamte
+        ABQval = np.maximum(ABQval, self.flowmin[1])
+        SAval = np.maximum(SAval, self.flowmin[2])
+
         vals = np.array([Otowival, ABQval, SAval])
 
         bias = np.clip(
@@ -62,6 +72,7 @@ class AR1:
         forecast = np.maximum(forecast, self.flowmin - self.bias_95interval[1])
         forecast = np.minimum(forecast, self.flowmax + self.bias_95interval[1])
 
+        
         # make sure forecast is not negative
         forecast = np.max(forecast, 0)
         return vals, forecast

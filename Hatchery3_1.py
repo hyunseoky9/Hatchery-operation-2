@@ -494,7 +494,11 @@ class Hatchery3_1:
                     p_next.append(p_next_perlocus)
                     # stock fish genotype frequency
                     if a > 0:
-                        K = np.array([np.random.multinomial(int(n), pvals) for n, pvals in zip(Nb, phtensor[l])]) # (cohort, genotype)
+                        try:
+                            K = np.array([np.random.default_rng().multivariate_hypergeometric(n.astype(int), draw.astype(int)) for  draw,n in zip(np.floor(Nb),np.floor(phtensor[l]*Nc.reshape(-1,1)))])
+                        except ValueError:
+                            foo = 0
+                        #K = np.array([np.random.multinomial(int(n), pvals) for n, pvals in zip(Nb, phtensor[l])]) # (cohort, genotype)
                         K_sum = np.sum(K,axis=1)
                         K_sum[K_sum == 0] = 1 # if the sum of genotype frequency is 0, set it to 1.
                         pc_p = K/(K_sum.reshape(-1,1)) # frequency of selected broodstock for production from each cohort. (cohort, genotype)
@@ -510,7 +514,9 @@ class Hatchery3_1:
                     Xpprime = np.random.multinomial(int(Nc0_next),pprime) if Nc0_next < 1e5 else np.round(Nc0_next*pprime) # Xpprime is the number individuals in the collected eggs/juv's for each genotype
                     ph0_next_perlocus = Xpprime/np.sum(Xpprime) if np.sum(Xpprime) > 0 else np.zeros(self.n_genotypes) # genotype frequency in the hatchery
                     ph0_next.append(ph0_next_perlocus)
-                    Xppprime = np.array([np.random.multinomial(int(n), pvals) if n < 1e5 else np.round(int(n)*pvals) for n, pvals in zip(Nc_next, phtensor[l])]) # (cohort, genotype)
+                    Xppprime = np.round(phtensor[l] * Nc.reshape(-1,1) - K)
+                    if np.any(Xppprime < 0):
+                        foo = 0
                     Xppprime_sum = np.sum(Xppprime,axis=1) # (cohort, 1)
                     Xppprime_sum[Xppprime_sum == 0] = 1 # if the sum of genotype frequency is 0, set it to 1.
                     ph_next_perlocus = Xppprime/(Xppprime_sum.reshape(-1,1)) # (cohort, genotype)
@@ -1081,7 +1087,10 @@ class Hatchery3_1:
         ph_next = []
         for l in range(self.n_locus):
             idx1,idx2 = int(l*self.n_genotypes), int((l+1)*self.n_genotypes)
-            Zp = np.array([np.random.multinomial(int(n), pvals) if n < 1e5 else np.round(n*pvals) for n, pvals in zip(Ncnext[1::],phtensor[l])]) # (cohort, genotype)
+            try:
+                Zp = np.array([np.random.multinomial(int(n), pvals) if n < 1e5 else np.round(n*pvals) for n, pvals in zip(Ncnext[1::],phtensor[l])]) # (cohort, genotype)
+            except ValueError: # if Ncnext is empty, then Zp will be empty
+                doo = 0
             Zp0 = np.random.multinomial(int(Ncnext[0]),ph0[idx1:idx2]) if Ncnext[0] < 1e5 else np.round(Ncnext[0]*ph0[idx1:idx2]) # (genotype)
             Zp = np.vstack((Zp0,Zp)) # (genotype, cohort) 
             Zp_sum = np.sum(Zp,axis=1)
