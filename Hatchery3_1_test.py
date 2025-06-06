@@ -8,10 +8,9 @@ import os
 from AR1 import AR1
 
 
-class Hatchery3_1:
+class Hatchery3_1_test:
     """
-    environment for the hatchery problem implementation-grade parameterization.
-    uses heterozygosity as a genetic diversity variable but it does not affect the demographic process unlike Hatchery3_0.
+    Hatchery3.1 adapted to test how heterozygosity is affected by the augmentation if we  breed from only 1 pair
     """
     def __init__(self,initstate,parameterization_set,discretization_set,LC_prediction_method):
         self.envID = 'Hatchery3.1'
@@ -67,8 +66,10 @@ class Hatchery3_1:
         self.n_genotypes = paramdf['n_genotypes'][self.parset]
         self.n_locus = paramdf['n_locus'][self.parset]
         self.n_cohorts = paramdf['n_cohorts'][self.parset]
-        self.b = np.array([paramdf['b1'][self.parset],paramdf['b2'][self.parset],paramdf['b3'][self.parset],paramdf['b4'][self.parset]])
-        self.fc = np.array([paramdf['fc1'][self.parset],paramdf['fc2'][self.parset],paramdf['fc3'][self.parset],paramdf['fc4'][self.parset]])
+        self.b = np.array([0,1,0,0])
+        #self.b = np.array([paramdf['b1'][self.parset],paramdf['b2'][self.parset],paramdf['b3'][self.parset],paramdf['b4'][self.parset]])
+        self.fc = np.ones(self.n_cohorts)*1000000
+        #self.fc = np.array([paramdf['fc1'][self.parset],paramdf['fc2'][self.parset],paramdf['fc3'][self.parset],paramdf['fc4'][self.parset]])
         self.s0egg = paramdf['s0egg'][self.parset] # survival rate of egg to hatchery
         self.s0larvae = paramdf['s0larvae'][self.parset] # survival rate of hatchery to age 0 cohort
         self.eggcollection_max = paramdf['eggcollection_max'][self.parset] # maximum number of eggs that can be collected 
@@ -223,8 +224,8 @@ class Hatchery3_1:
                 new_obs.append(initstate[2])
             # Nc & ONc
             if initstate[3] == -1:
-                Ncval = np.random.uniform(size=4)*self.eggcollection_max*self.s0egg + np.random.uniform(size=4)*self.larvaecollection_max*self.s0larvae
-                Ncval = np.cumprod(np.concatenate([[1],self.sc])) * Ncval
+                Ncval = 2 #np.random.uniform(size=4)*self.eggcollection_max*self.s0egg + np.random.uniform(size=4)*self.larvaecollection_max*self.s0larvae
+                Ncval = np.ceil(np.cumprod(np.concatenate([[1],self.sc])) * Ncval)
                 if self.discset == -1:
                     Ncval = np.log(Ncval + 1)
                 else:
@@ -314,8 +315,8 @@ class Hatchery3_1:
                 new_obs.append(initstate[2])
             # Nc & ONc
             if initstate[3] == -1:
-                Ncval = np.random.uniform(size=4)*self.eggcollection_max*self.s0egg + np.random.uniform(size=4)*self.larvaecollection_max*self.s0larvae
-                Ncval = np.cumprod(np.concatenate([[1],self.sc])) * Ncval
+                Ncval = 2 #np.random.uniform(size=4)*self.eggcollection_max*self.s0egg + np.random.uniform(size=4)*self.larvaecollection_max*self.s0larvae
+                Ncval = np.ceil(np.cumprod(np.concatenate([[1],self.sc])) * Ncval)
                 if self.discset == -1:
                     Ncval = np.log(Ncval + 1)
                 else:
@@ -447,7 +448,7 @@ class Hatchery3_1:
                 extra_info['summer_mortality'] = summer_mortality
                 N0_next = np.minimum(P*np.exp(-124*M0)*((1 - delfall) + self.tau*deldiff + (1 - self.tau)*self.r0*self.phidiff),np.ones(self.n_reach)*self.N0minmax[1])
                 N1_next = np.minimum((N0+N1)*np.exp(-215*M1)*((1-delfall) + self.tau*delfall + (1 - self.tau)*self.r1*self.phifall),np.ones(self.n_reach)*self.N1minmax[1])
-                # hatchery stuff (Nh, Nc, Nc0)
+                # hatchery stuff
                 needed = 2*a/(np.dot(self.b,self.fc)) # amount of f0 needed to produce 'a' fish
                 Nh_next = a + 10 # added 10 so that there's no small discrepancy that doesn't allow stocking the produced amount in the fall.
                 if np.any(Nc - needed*self.b < 0):
@@ -494,7 +495,8 @@ class Hatchery3_1:
                     p_next.append(p_next_perlocus)
                     # stock fish genotype frequency
                     if a > 0:
-                        K = np.array([np.random.default_rng().multivariate_hypergeometric(n.astype(int), draw.astype(int)) for  draw,n in zip(np.floor(Nb),np.ceil(phtensor[l]*Nc.reshape(-1,1)))]) # multivariate hypergeometric dist. is multinomial sampling without replacement.
+                        #K = np.array([np.random.default_rng().multivariate_hypergeometric(n.astype(int), draw.astype(int)) for  draw,n in zip(np.floor(Nb),np.ceil(phtensor[l]*Nc.reshape(-1,1)))]) # multivariate hypergeometric dist. is multinomial sampling without replacement.
+                        K = np.array([np.random.default_rng().multivariate_hypergeometric(n.astype(int), draw.astype(int)) for  draw,n in zip(np.ceil(Nb),np.ceil(phtensor[l]*Nc.reshape(-1,1)))]) # multivariate hypergeometric dist. is multinomial sampling without replacement.
                         K_sum = np.sum(K,axis=1)
                         #K = np.array([np.random.multinomial(int(n), pvals) for n, pvals in zip(Nb, phtensor[l])]) # (cohort, genotype)
                         K_sum[K_sum == 0] = 1 # if the sum of genotype frequency is 0, set it to 1.
@@ -507,7 +509,6 @@ class Hatchery3_1:
                         pc_next.append(pc_perloci)
                     else:
                         pc_next.append(np.zeros(self.n_genotypes))
-                        K = np.zeros((self.n_cohorts,self.n_genotypes)) # no broodstock collection, so K is 0
                     # broodstock genotype frequency
                     Xpprime = np.random.multinomial(int(Nc0_next),pprime) if Nc0_next < 1e5 else np.round(Nc0_next*pprime) # Xpprime is the number individuals in the collected eggs/juv's for each genotype
                     ph0_next_perlocus = Xpprime/np.sum(Xpprime) if np.sum(Xpprime) > 0 else np.zeros(self.n_genotypes) # genotype frequency in the hatchery
@@ -1106,7 +1107,10 @@ class Hatchery3_1:
         ph_next = []
         for l in range(self.n_locus):
             idx1,idx2 = int(l*self.n_genotypes), int((l+1)*self.n_genotypes)
-            Zp = np.array([np.random.multinomial(int(n), pvals) if n < 1e5 else np.round(n*pvals) for n, pvals in zip(Ncnext[1::],phtensor[l])]) # (cohort, genotype)
+            try:
+                Zp = np.array([np.random.multinomial(int(n), pvals) if n < 1e5 else np.round(n*pvals) for n, pvals in zip(Ncnext[1::],phtensor[l])]) # (cohort, genotype)
+            except ValueError: # if Ncnext is empty, then Zp will be empty
+                doo = 0
             Zp0 = np.random.multinomial(int(Ncnext[0]),ph0[idx1:idx2]) if Ncnext[0] < 1e5 else np.round(Ncnext[0]*ph0[idx1:idx2]) # (genotype)
             Zp = np.vstack((Zp0,Zp)) # (genotype, cohort) 
             Zp_sum = np.sum(Zp,axis=1)

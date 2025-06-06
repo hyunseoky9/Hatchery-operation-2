@@ -50,15 +50,15 @@ class AR1:
         Otowival = np.minimum(Otowival, self.flowmax[0])
 
         ### pilot correction for future cliamte. max flowrate is 80% of the max flowrate.
-        Otowiratio = (Otowival - self.flowmin[0]) / (self.flowmax[0] - self.flowmin[0])
-        Otowival = Otowiratio * (self.flowmax[0]*0.5 - self.flowmin[0]) + self.flowmin[0]
+        #Otowiratio = (Otowival - self.flowmin[0]) / (self.flowmax[0] - self.flowmin[0])
+        #Otowival = Otowiratio * (self.flowmax[0]*0.5 - self.flowmin[0]) + self.flowmin[0]
 
         ABQval = Otowival + self.constants[1] - self.constants[0]
         SAval = Otowival + self.constants[2] - self.constants[0]
 
         ### pilot correction for future cliamte
-        ABQval = np.maximum(ABQval, self.flowmin[1])
-        SAval = np.maximum(SAval, self.flowmin[2])
+        #ABQval = np.maximum(ABQval, self.flowmin[1])
+        #SAval = np.maximum(SAval, self.flowmin[2])
 
         vals = np.array([Otowival, ABQval, SAval])
 

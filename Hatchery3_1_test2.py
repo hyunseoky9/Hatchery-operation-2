@@ -8,10 +8,9 @@ import os
 from AR1 import AR1
 
 
-class Hatchery3_1:
+class Hatchery3_1_test2:
     """
-    environment for the hatchery problem implementation-grade parameterization.
-    uses heterozygosity as a genetic diversity variable but it does not affect the demographic process unlike Hatchery3_0.
+    for testing if there's non-random collection because of spatial bias (collects from only few locations)
     """
     def __init__(self,initstate,parameterization_set,discretization_set,LC_prediction_method):
         self.envID = 'Hatchery3.1'
@@ -440,7 +439,8 @@ class Hatchery3_1:
                 L = self.q2LC(q)
                 extra_info['L'] = L
                 kappa = np.exp(self.beta*(L - self.Lmean) + np.random.normal(self.mu, self.sd))
-                P = (self.alpha*(N0 + self.beta_2*N1))/(1 + self.alpha*(N0 + self.beta_2*N1)/kappa)
+                effspawner = N0 + self.beta_2*N1 # effective spawner
+                P = (self.alpha*effspawner)/(1 + self.alpha*effspawner/kappa)
                 M0 = np.exp(np.random.normal(self.lM0mu, self.lM0sd))
                 M1 = np.exp(np.random.normal(self.lM1mu, self.lM1sd))
                 summer_mortality = np.exp(-124*M0)*((1 - delfall) + self.tau*deldiff + (1 - self.tau)*self.r0*self.phidiff)
@@ -509,6 +509,16 @@ class Hatchery3_1:
                         pc_next.append(np.zeros(self.n_genotypes))
                         K = np.zeros((self.n_cohorts,self.n_genotypes)) # no broodstock collection, so K is 0
                     # broodstock genotype frequency
+                    ## introduce spatial bias in broodstock collection 
+                    #biasprop = 0.0001 # proportion of wild age1+ that spawned the collected eggs/larvae.
+                    #toteffspawner = np.sum(effspawner)
+                    #biasedtoteffspawner = np.maximum(toteffspawner*biasprop,100) # total effective spawner that spawned the collected eggs/larvae.
+                    ##print(f'biasedtoteffspawner: {biasedtoteffspawner}')
+                    #biasgfreq = np.random.multinomial(biasedtoteffspawner,p[idx1:idx2]) if biasedtoteffspawner < 1e5 else np.round(biasedtoteffspawner*p[idx1:idx2])
+                    #biasgfreq = biasgfreq/np.sum(biasgfreq)
+                    #biasallelefreq = np.array([biasgfreq[0]+1/2*biasgfreq[1],biasgfreq[2]+1/2*biasgfreq[1]]) # allele frequency for locus l
+                    #biaspprime = np.array([biasallelefreq[0]**2,2*biasallelefreq[0]*biasallelefreq[1],biasallelefreq[1]**2]) # genotype frequency of the next generation assuming HW eqbm.
+                    #Xpprime = np.random.multinomial(int(Nc0_next),biaspprime) if Nc0_next < 1e5 else np.round(Nc0_next*biaspprime) # Xpprime is the number individuals in the collected eggs/juv's for each genotype
                     Xpprime = np.random.multinomial(int(Nc0_next),pprime) if Nc0_next < 1e5 else np.round(Nc0_next*pprime) # Xpprime is the number individuals in the collected eggs/juv's for each genotype
                     ph0_next_perlocus = Xpprime/np.sum(Xpprime) if np.sum(Xpprime) > 0 else np.zeros(self.n_genotypes) # genotype frequency in the hatchery
                     ph0_next.append(ph0_next_perlocus)
