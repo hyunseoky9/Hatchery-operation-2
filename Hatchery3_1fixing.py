@@ -8,7 +8,7 @@ import os
 from AR1 import AR1
 
 
-class Hatchery3_1:
+class Hatchery3_1fixing:
     """
     environment for the hatchery problem implementation-grade parameterization.
     uses heterozygosity as a genetic diversity variable but it does not affect the demographic process unlike Hatchery3_0.
