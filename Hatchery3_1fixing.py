@@ -10,7 +10,8 @@ from AR1 import AR1
 
 class Hatchery3_1fixing:
     """
-    Hatchery3.1 adapted to test how heterozygosity is affected by the augmentation if we  breed from only 1 pair
+    environment for the hatchery problem implementation-grade parameterization.
+    uses heterozygosity as a genetic diversity variable but it does not affect the demographic process unlike Hatchery3_0.
     """
     def __init__(self,initstate,parameterization_set,discretization_set,LC_prediction_method):
         self.envID = 'Hatchery3.1'
@@ -76,7 +77,7 @@ class Hatchery3_1fixing:
         self.Nth = paramdf['Nth'][self.parset]
         self.extant = paramdf['extant'][self.parset] # reward for not being
         self.prodcost = paramdf['prodcost'][self.parset] # production cost in spring if deciding to produce
-        self.unitcost = paramdf['unitcost'][self.parset] # unit production cost.
+
         # for monitoring simulation (alternate parameterization for )
         self.sampler = self.sz
         
@@ -222,8 +223,8 @@ class Hatchery3_1fixing:
                 new_obs.append(initstate[2])
             # Nc & ONc
             if initstate[3] == -1:
-                Ncval = 2 #np.random.uniform(size=4)*self.eggcollection_max*self.s0egg + np.random.uniform(size=4)*self.larvaecollection_max*self.s0larvae
-                Ncval = np.ceil(np.cumprod(np.concatenate([[1],self.sc])) * Ncval)
+                Ncval = np.random.uniform(size=4)*self.eggcollection_max*self.s0egg + np.random.uniform(size=4)*self.larvaecollection_max*self.s0larvae
+                Ncval = np.cumprod(np.concatenate([[1],self.sc])) * Ncval
                 if self.discset == -1:
                     Ncval = np.log(Ncval + 1)
                 else:
@@ -313,8 +314,8 @@ class Hatchery3_1fixing:
                 new_obs.append(initstate[2])
             # Nc & ONc
             if initstate[3] == -1:
-                Ncval = 2 #np.random.uniform(size=4)*self.eggcollection_max*self.s0egg + np.random.uniform(size=4)*self.larvaecollection_max*self.s0larvae
-                Ncval = np.ceil(np.cumprod(np.concatenate([[1],self.sc])) * Ncval)
+                Ncval = np.random.uniform(size=4)*self.eggcollection_max*self.s0egg + np.random.uniform(size=4)*self.larvaecollection_max*self.s0larvae
+                Ncval = np.cumprod(np.concatenate([[1],self.sc])) * Ncval
                 if self.discset == -1:
                     Ncval = np.log(Ncval + 1)
                 else:
@@ -494,18 +495,14 @@ class Hatchery3_1fixing:
                     # stock fish genotype frequency
                     if a > 0:
                         #K = np.array([np.random.default_rng().multivariate_hypergeometric(n.astype(int), draw.astype(int)) for  draw,n in zip(np.floor(Nb),np.ceil(phtensor[l]*Nc.reshape(-1,1)))]) # multivariate hypergeometric dist. is multinomial sampling without replacement.
-                        try:
-                            K = np.array([np.random.default_rng().multivariate_hypergeometric(n.astype(int), draw.astype(int)) for  draw,n in zip(np.ceil(Nb),np.ceil(phtensor[l]*Nc.reshape(-1,1)))]) # multivariate hypergeometric dist. is multinomial sampling without replacement.
-                        except ValueError:
-                            foo= 0
+                        K = np.array([np.random.multinomial(int(n), pvals) for n, pvals in zip(Nb, phtensor[l])]) # (cohort, genotype)
                         K_sum = np.sum(K,axis=1)
-                        #K = np.array([np.random.multinomial(int(n), pvals) for n, pvals in zip(Nb, phtensor[l])]) # (cohort, genotype)
                         K_sum[K_sum == 0] = 1 # if the sum of genotype frequency is 0, set it to 1.
                         pc_p = K/(K_sum.reshape(-1,1)) # frequency of selected broodstock for production from each cohort. (cohort, genotype)
                         allelefreq_pc = np.array([pc_p[:,0]+1/2*pc_p[:,1],(pc_p[:,2]+1/2*pc_p[:,1])]) # allele frequency for pc_p
                         pc_pp = np.array([allelefreq_pc[0]**2,2*allelefreq_pc[0]*allelefreq_pc[1],allelefreq_pc[1]**2]).T # genotype frequency of the F1 assuming HW eqbm.
-                        Kp = np.array([np.random.multinomial(int(n), pvals) if n < 1e5 else np.round(n*pvals)  for n, pvals in zip(np.round(Nb)*self.fc, pc_pp)]) # (cohort, genotype); genotype frequency of F1 from each cohort selected for breeding. We account for irphi (immediate death after stocking) here in advance.
-                        pc_perloci = np.sum(Kp,axis=0)/(np.dot(Nb,self.fc)) # (genotype) genotype frequency of F1.
+                        Kp = np.array([np.random.multinomial(int(n), pvals) if n < 1e5 else np.round(n*pvals)  for n, pvals in zip(np.round(Nb)*self.fc*self.irphi, pc_pp)]) # (cohort, genotype); genotype frequency of F1 from each cohort selected for breeding. We account for irphi (immediate death after stocking) here in advance.
+                        pc_perloci = np.sum(Kp,axis=0)/(np.dot(Nb,self.fc)*self.irphi) # (genotype) genotype frequency of F1.
                         pc_perloci = pc_perloci/np.sum(pc_perloci) # normalize to make sure each locus' genotype frequency sums to 1
                         pc_next.append(pc_perloci)
                     else:
@@ -514,7 +511,8 @@ class Hatchery3_1fixing:
                     Xpprime = np.random.multinomial(int(Nc0_next),pprime) if Nc0_next < 1e5 else np.round(Nc0_next*pprime) # Xpprime is the number individuals in the collected eggs/juv's for each genotype
                     ph0_next_perlocus = Xpprime/np.sum(Xpprime) if np.sum(Xpprime) > 0 else np.zeros(self.n_genotypes) # genotype frequency in the hatchery
                     ph0_next.append(ph0_next_perlocus)
-                    Xppprime = np.round(np.ceil(phtensor[l] * Nc.reshape(-1,1)) - K)
+                    #Xppprime = np.round(np.ceil(phtensor[l] * Nc.reshape(-1,1)) - K)
+                    Xppprime = np.array([np.random.multinomial(int(n), pvals) if n < 1e5 else np.round(int(n)*pvals) for n, pvals in zip(Nc_next, phtensor[l])]) # (cohort, genotype)
                     Xppprime_sum = np.sum(Xppprime,axis=1) # (cohort, 1)
                     Xppprime_sum[Xppprime_sum == 0] = 1 # if the sum of genotype frequency is 0, set it to 1.
                     ph_next_perlocus = Xppprime/(Xppprime_sum.reshape(-1,1)) # (cohort, genotype)
@@ -530,7 +528,7 @@ class Hatchery3_1fixing:
                 het_perloci = p_next[np.arange(0,self.n_genotypes*self.n_locus,self.n_genotypes) + 1]
                 G_next = [np.mean(het_perloci)] # heterozygosity in the population
                 # reward & done
-                reward = self.extant - self.unitcost*a if a > 0 else self.extant
+                reward = self.extant - self.prodcost if a > 0 else self.extant
                 done = False
                 # update state & obs
                 if self.discset == -1:
@@ -569,28 +567,18 @@ class Hatchery3_1fixing:
                     Nc0_next = Nc0.copy()
                     Nc_next = Nc.copy()
                     # genetic stuff (stocking effect on allele frequency)
-                    # genotype frequency for F1 fish still in the hatchery genotype frequency and F1 fish that's stocked (ps)
+                    p_next = self.p_update_post_stocking(a,p,pc,totN0,totN1) if a > 0 else p.copy()
+                    # stock fish genotype frequency
                     if a > 0:
                         pc_next = []
-                        ps = []
                         for l in range(self.n_locus):
                             idx1,idx2 = int(l*self.n_genotypes), int((l+1)*self.n_genotypes)
-                            # pc
                             Kp = np.random.multinomial(Nh_next.astype(int), pc[idx1:idx2]) if Nh_next < 1e5 else np.round(Nh_next*pc[idx1:idx2]) # frequency in the F1 in hatchery after stocking.
-                            pc_perlocus = Kp/np.sum(Kp) if Nh_next > 0 else np.zeros(self.n_genotypes)
+                            pc_perlocus = Kp/np.sum(Kp) if Nh_next > 0 else np.zeros(self.n_genotypes*self.n_locus)
                             pc_next.append(pc_perlocus)
-                            # ps
-                            psprime_perlocus = (Nh[0]*pc[idx1:idx2] - Kp)/a # Nh*pc[idx1:idx2]= genotype count before stocking, Kp= genotype count after stocking. subtracting the two gives the genotype count of stocked fish.
-                            Kpp = np.random.multinomial(a*self.irphi, psprime_perlocus) if a*self.irphi < 1e5 else np.round(a*self.irphi*psprime_perlocus) # genotype frequency of stocked fish.
-                            ps_perlocus = Kpp/np.sum(Kpp) if np.sum(Kpp) > 0 else np.zeros(self.n_genotypes)
-                            ps.append(ps_perlocus)
                         pc_next = np.concatenate(pc_next)
-                        ps = np.concatenate(ps)
                     else:
                         pc_next = pc.copy()
-                        ps = np.zeros(self.n_genotypes*self.n_locus) # no stocking, so ps is zero.
-                    # wild genotype frequency
-                    p_next = self.p_update_post_stocking(a,p,ps,totN0,totN1) if a > 0 else p.copy()
                     # reward & done
                     reward = self.extant
                     done = False
@@ -649,20 +637,7 @@ class Hatchery3_1fixing:
                     Nc_next = np.concatenate([Nc0,Nc[0:-1]*self.sc]) # nc0 becomes age 1 and the rest of the cohorts age by 1 yr, all with some survival rate.
                     Nc0_next = 0 # no age 0 fish left in spring.
                     # genetic stuff (stocking and winter survival impact on allele frequency)
-                    ## genotype frequency of stocked fish (ps)
-                    if a > 0:
-                        ps = []
-                        for l in range(self.n_locus):
-                            idx1,idx2 = int(l*self.n_genotypes), int((l+1)*self.n_genotypes)
-                            Kp = np.random.multinomial(a, pc[idx1:idx2])
-                            ps_perlocus = Kp/np.sum(Kp) if np.sum(Kp) > 0 else np.zeros(self.n_genotypes) # genotype frequency of stocked fish.
-                            ps.append(ps_perlocus)
-                        ps = np.concatenate(ps)
-                    else:
-                        ps = np.zeros(self.n_genotypes*self.n_locus) # no stocking, so ps is zero.
-                    # wild genotype frequency  before winter survival
-                    p_prime = self.p_update_post_stocking(a,p,ps,totN0,totN1) if a > 0 else p.copy() 
-                    # wild genotype frequency after winter survival
+                    p_prime = self.p_update_post_stocking(a,p,pc,totN0,totN1) if a > 0 else p.copy()
                     p_next = []
                     for l in range(self.n_locus):
                         idx1,idx2 = int(l*self.n_genotypes), int((l+1)*self.n_genotypes)
@@ -1079,7 +1054,7 @@ class Hatchery3_1fixing:
             stock_scaled_flr[np.argsort(scaledfrac)[::-1][0:np.abs(round(margin))]] += 1
         return list(stock_scaled_flr.astype(int))
     
-    def p_update_post_stocking(self,a,p,ps,N0sum,N1sum):
+    def p_update_post_stocking(self,a,p,pc,N0sum,N1sum):
         """
         get the next timestep genotype frequency of the wild population after stocking
         input:
@@ -1091,7 +1066,7 @@ class Hatchery3_1fixing:
         output:
             p_next: next timestep genotype frequency (n_genotype,n_locus)
         """
-        p_next = ((N0sum + N1sum)*p + a*self.irphi*ps)/(N0sum+N1sum+a*self.irphi) # (genotype, locus)
+        p_next = ((N0sum + N1sum)*p + a*self.irphi*pc)/(N0sum+N1sum+a*self.irphi) # (genotype, locus)
         return p_next
             
     def ph_winterupdate(self,ph,ph0,Ncnext):
@@ -1108,10 +1083,7 @@ class Hatchery3_1fixing:
         ph_next = []
         for l in range(self.n_locus):
             idx1,idx2 = int(l*self.n_genotypes), int((l+1)*self.n_genotypes)
-            try:
-                Zp = np.array([np.random.multinomial(int(n), pvals) if n < 1e5 else np.round(n*pvals) for n, pvals in zip(Ncnext[1::],phtensor[l])]) # (cohort, genotype)
-            except ValueError: # if Ncnext is empty, then Zp will be empty
-                doo = 0
+            Zp = np.array([np.random.multinomial(int(n), pvals) if n < 1e5 else np.round(n*pvals) for n, pvals in zip(Ncnext[1::],phtensor[l])]) # (cohort, genotype)
             Zp0 = np.random.multinomial(int(Ncnext[0]),ph0[idx1:idx2]) if Ncnext[0] < 1e5 else np.round(Ncnext[0]*ph0[idx1:idx2]) # (genotype)
             Zp = np.vstack((Zp0,Zp)) # (genotype, cohort) 
             Zp_sum = np.sum(Zp,axis=1)

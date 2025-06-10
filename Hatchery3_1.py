@@ -474,13 +474,14 @@ class Hatchery3_1:
                 else:
                     Nc_next = np.maximum(Nc - 2*a/(np.dot(self.b,self.fc))*self.b,0)
                     Nb = needed*self.b # amount of fish used for production from each cohort.
-                Nc0_next = np.random.uniform(size=1)*self.eggcollection_max*self.s0egg + np.random.uniform(size=1)*self.larvaecollection_max*self.s0larvae # Nc is the number of females so it's divided by 2. hatchery uses 1:1 sex ratio for production.
+                Nc0_next = np.array([65000])#np.random.uniform(size=1)*self.eggcollection_max*self.s0egg + np.random.uniform(size=1)*self.larvaecollection_max*self.s0larvae # Nc is the number of females so it's divided by 2. hatchery uses 1:1 sex ratio for production.
                 # hydrological stuff. No springflow in fall (stays the same)
                 # genetic stuff (reproduction and summer survival impact on allele frequency)
                 p_next = []
                 ph0_next = []
                 ph_next = []
                 pc_next = []
+                #pc2_next = []
                 phtensor = np.transpose(ph.reshape(self.n_cohorts, self.n_locus, self.n_genotypes),(1,0,2)) # dim: (self.n_locus, self.n_cohorts, self.n_genotypes)
                 for l in range(self.n_locus):
                     # wild  genotype frequency
@@ -495,8 +496,8 @@ class Hatchery3_1:
                     # stock fish genotype frequency
                     if a > 0:
                         K = np.array([np.random.default_rng().multivariate_hypergeometric(n.astype(int), draw.astype(int)) for  draw,n in zip(np.floor(Nb),np.ceil(phtensor[l]*Nc.reshape(-1,1)))]) # multivariate hypergeometric dist. is multinomial sampling without replacement.
+                        #K = np.array([np.random.multinomial(int(n), pvals) for n, pvals in zip(np.floor(Nb), phtensor[l])]) # (cohort, genotype)
                         K_sum = np.sum(K,axis=1)
-                        #K = np.array([np.random.multinomial(int(n), pvals) for n, pvals in zip(Nb, phtensor[l])]) # (cohort, genotype)
                         K_sum[K_sum == 0] = 1 # if the sum of genotype frequency is 0, set it to 1.
                         pc_p = K/(K_sum.reshape(-1,1)) # frequency of selected broodstock for production from each cohort. (cohort, genotype)
                         allelefreq_pc = np.array([pc_p[:,0]+1/2*pc_p[:,1],(pc_p[:,2]+1/2*pc_p[:,1])]) # allele frequency for pc_p
@@ -505,6 +506,20 @@ class Hatchery3_1:
                         pc_perloci = np.sum(Kp,axis=0)/(np.dot(Nb,self.fc)) # (genotype) genotype frequency of F1.
                         pc_perloci = pc_perloci/np.sum(pc_perloci) # normalize to make sure each locus' genotype frequency sums to 1
                         pc_next.append(pc_perloci)
+
+                        #K2 = np.array([np.random.multinomial(int(n), pvals) for n, pvals in zip(np.floor(Nb), phtensor[l])]) # (cohort, genotype)
+                        #K2_sum = np.sum(K2,axis=1)
+                        #K2_sum[K2_sum == 0] = 1 # if the sum of genotype frequency is 0, set it to 1.
+                        #pc_p2 = K2/(K2_sum.reshape(-1,1)) # frequency of selected broodstock for production from each cohort. (cohort, genotype)
+                        #allelefreq_pc2 = np.array([pc_p2[:,0]+1/2*pc_p2[:,1],(pc_p2[:,2]+1/2*pc_p2[:,1])]) # allele frequency for pc_p
+                        #pc_pp2 = np.array([allelefreq_pc2[0]**2,2*allelefreq_pc2[0]*allelefreq_pc2[1],allelefreq_pc2[1]**2]).T # genotype frequency of the F1 assuming HW eqbm.
+                        #Kp2 = np.array([np.random.multinomial(int(n), pvals) if n < 1e5 else np.round(n*pvals)  for n, pvals in zip(np.round(Nb)*self.fc, pc_pp2)]) # (cohort, genotype); genotype frequency of F1 from each cohort selected for breeding. We account for irphi (immediate death after stocking) here in advance.
+                        #pc_perloci2 = np.sum(Kp2,axis=0)/(np.dot(Nb,self.fc)) # (genotype) genotype frequency of F1.
+                        #pc_perloci2 = pc_perloci2/np.sum(pc_perloci2) # normalize to make sure each locus' genotype frequency sums to 1
+                        #pc2_next.append(pc_perloci2)
+                        #print(f'MHG pc_perloci: {pc_perloci}')
+                        #print(f'M pc_perloci: {pc_perloci2}')
+                        #foo = 0
                     else:
                         pc_next.append(np.zeros(self.n_genotypes))
                         K = np.zeros((self.n_cohorts,self.n_genotypes)) # no broodstock collection, so K is 0
@@ -513,6 +528,7 @@ class Hatchery3_1:
                     ph0_next_perlocus = Xpprime/np.sum(Xpprime) if np.sum(Xpprime) > 0 else np.zeros(self.n_genotypes) # genotype frequency in the hatchery
                     ph0_next.append(ph0_next_perlocus)
                     Xppprime = np.round(np.ceil(phtensor[l] * Nc.reshape(-1,1)) - K)
+                    #Xppprime = np.array([np.random.multinomial(int(n), pvals) if n < 1e5 else np.round(int(n)*pvals) for n, pvals in zip(Nc_next, phtensor[l])]) # (cohort, genotype)
                     Xppprime_sum = np.sum(Xppprime,axis=1) # (cohort, 1)
                     Xppprime_sum[Xppprime_sum == 0] = 1 # if the sum of genotype frequency is 0, set it to 1.
                     ph_next_perlocus = Xppprime/(Xppprime_sum.reshape(-1,1)) # (cohort, genotype)
@@ -523,7 +539,14 @@ class Hatchery3_1:
                 p_next = np.concatenate(p_next)
                 ph0_next = np.concatenate(ph0_next)
                 pc_next = np.concatenate(pc_next)
-            
+                #pc2_next = np.concatenate(pc2_next)
+
+                #pchet_perloci = np.array(pc_next)[np.arange(0,self.n_genotypes*self.n_locus,self.n_genotypes) + 1]
+                #pcG = np.mean(pchet_perloci) # heterozygosity in the population
+                #pc2het_perloci = np.array(pc2_next)[np.arange(0,self.n_genotypes*self.n_locus,self.n_genotypes) + 1]
+                #pc2G = np.mean(pc2het_perloci) # heterozygosity in the population
+                #mhggreater = 1 if pcG >= pc2G else 0
+                #extra_info['mhggreater'] = mhggreater
                 # calculate heterozygosity
                 het_perloci = p_next[np.arange(0,self.n_genotypes*self.n_locus,self.n_genotypes) + 1]
                 G_next = [np.mean(het_perloci)] # heterozygosity in the population
@@ -579,6 +602,8 @@ class Hatchery3_1:
                             pc_next.append(pc_perlocus)
                             # ps
                             psprime_perlocus = (Nh[0]*pc[idx1:idx2] - Kp)/a # Nh*pc[idx1:idx2]= genotype count before stocking, Kp= genotype count after stocking. subtracting the two gives the genotype count of stocked fish.
+                            psprime_perlocus[np.abs(psprime_perlocus) < 1e-10] = 0
+                            psprime_perlocus /= np.sum(psprime_perlocus)
                             Kpp = np.random.multinomial(a*self.irphi, psprime_perlocus) if a*self.irphi < 1e5 else np.round(a*self.irphi*psprime_perlocus) # genotype frequency of stocked fish.
                             ps_perlocus = Kpp/np.sum(Kpp) if np.sum(Kpp) > 0 else np.zeros(self.n_genotypes)
                             ps.append(ps_perlocus)
@@ -587,6 +612,10 @@ class Hatchery3_1:
                     else:
                         pc_next = pc.copy()
                         ps = np.zeros(self.n_genotypes*self.n_locus) # no stocking, so ps is zero.
+                    
+                    # compare the heterozygosity of stocked fish vs wild fish
+                    psG = np.mean(ps[np.arange(0,self.n_genotypes*self.n_locus,self.n_genotypes) + 1]) # heterozygosity in the stocked fish
+                    extra_info['psGvspG'] = (psG - G)/G
                     # wild genotype frequency
                     p_next = self.p_update_post_stocking(a,p,ps,totN0,totN1) if a > 0 else p.copy()
                     # reward & done
@@ -658,6 +687,10 @@ class Hatchery3_1:
                         ps = np.concatenate(ps)
                     else:
                         ps = np.zeros(self.n_genotypes*self.n_locus) # no stocking, so ps is zero.
+                    # compare the heterozygosity of stocked fish vs wild fish
+                    psG = np.mean(ps[np.arange(0,self.n_genotypes*self.n_locus,self.n_genotypes) + 1]) # heterozygosity in the stocked fish
+                    extra_info['psGvspG'] = (psG - G)/G
+
                     # wild genotype frequency  before winter survival
                     p_prime = self.p_update_post_stocking(a,p,ps,totN0,totN1) if a > 0 else p.copy() 
                     # wild genotype frequency after winter survival
