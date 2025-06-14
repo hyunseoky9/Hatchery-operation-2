@@ -63,6 +63,8 @@ class Hatchery3_1:
         self.fpool_s = np.array([paramdf['fpools_a'][self.parset],paramdf['fpools_i'][self.parset],paramdf['fpools_s'][self.parset]])
         self.frun_f = np.array([paramdf['frunf_a'][self.parset],paramdf['frunf_i'][self.parset],paramdf['frunf_s'][self.parset]])
         self.frun_s = np.array([paramdf['fruns_a'][self.parset],paramdf['fruns_i'][self.parset],paramdf['fruns_s'][self.parset]])
+        self.avgeff_fr = np.array([paramdf['avgeff_fr_a'][self.parset],paramdf['avgeff_fr_i'][self.parset],paramdf['avgeff_fr_s'][self.parset]])
+        self.avgeff_fp = np.array([paramdf['avgeff_fp_a'][self.parset],paramdf['avgeff_fp_i'][self.parset],paramdf['avgeff_fp_s'][self.parset]])
         self.thetaf = np.array([paramdf['thetaf_a'][self.parset],paramdf['thetaf_i'][self.parset],paramdf['thetaf_s'][self.parset]])
         self.thetas = np.array([paramdf['thetas_a'][self.parset],paramdf['thetas_i'][self.parset],paramdf['thetas_s'][self.parset]])
         self.n_genotypes = paramdf['n_genotypes'][self.parset]
@@ -497,14 +499,10 @@ class Hatchery3_1:
                     Yp = np.random.multinomial(np.sum(N1_next).astype(int),gfreq) if np.sum(N1_next) < 1e5 else np.round(np.sum(N1_next)*gfreq) # Yp is the number of individuals in the age1 population for each genotype
                     p_next_perlocus = (Xp + Yp)/np.sum(Xp+Yp) # allele frequency in the population
                     p_next.append(p_next_perlocus)
-                    # genotype frequency of the collected eggs for new cohort.
-                    bias = 0.1 # percentage of the wild spawners that breeds collected eggs.
-                    
-
                     # stock fish genotype frequency
                     if a > 0:
-                        #K = np.array([np.random.default_rng().multivariate_hypergeometric(n.astype(int), draw.astype(int)) for  draw,n in zip(np.floor(Nb),np.ceil(phtensor[l]*Nc.reshape(-1,1)))]) # multivariate hypergeometric dist. is multinomial sampling without replacement.
-                        K = np.array([multivariate_hypergeom.rvs(n.astype(int), draw.astype(int)) for  draw,n in zip(np.floor(Nb),np.ceil(phtensor[l]*Nc.reshape(-1,1)))]) # multivariate hypergeometric dist. is multinomial sampling without replacement.
+                        K = np.array([np.random.default_rng().multivariate_hypergeometric(n.astype(int), draw.astype(int)) for  draw,n in zip(np.floor(Nb),np.ceil(phtensor[l]*Nc.reshape(-1,1)))]) # multivariate hypergeometric dist. is multinomial sampling without replacement.
+                        #K = np.array([multivariate_hypergeom.rvs(n.astype(int), draw.astype(int)) for  draw,n in zip(np.floor(Nb),np.ceil(phtensor[l]*Nc.reshape(-1,1)))]) # multivariate hypergeometric dist. is multinomial sampling without replacement.
                         #K = np.array([np.random.multinomial(int(n), pvals) for n, pvals in zip(np.floor(Nb), phtensor[l])]) # (cohort, genotype)
                         K_sum = np.sum(K,axis=1)
                         K_sum[K_sum == 0] = 1 # if the sum of genotype frequency is 0, set it to 1.
@@ -542,7 +540,14 @@ class Hatchery3_1:
                         K = np.zeros((self.n_cohorts,self.n_genotypes)) # no broodstock collection, so K is 0
                     # broodstock genotype frequency
                     ## new cohort genotype frequency
-                    Xpprime = np.random.multinomial(int(Nc0_next),pprime) if Nc0_next < 1e5 else np.round(Nc0_next*pprime) # Xpprime is the number individuals in the collected eggs/juv's for each genotype
+                    # genotype frequency of the collected eggs for new cohort.
+                    bias = 0.000001 # percentage of the wild spawners that breeds collected eggs.
+                    gfreqB = np.random.default_rng().multivariate_hypergeometric((gfreq*np.sum(effspawner)).astype(int),(np.ceil(np.sum(effspawner)*bias)).astype(int)) # multivariate hypergeometric dist. is multinomial sampling without replacement.
+                    #gfreqB = np.random.multinomial(np.ceil(np.sum(effspawner)*bias),gfreq)# B for biased sample
+                    gfreqB = gfreqB/np.sum(gfreqB)
+                    allelefreqB = np.array([gfreqB[0]+1/2*gfreqB[1],(gfreqB[2]+1/2*gfreqB[1])])
+                    pprimeB = np.array([allelefreqB[0]**2,2*allelefreqB[0]*allelefreqB[1],allelefreqB[1]**2]) # genotype frequency of the next generation assuming HW eqbm.
+                    Xpprime = np.random.multinomial(int(Nc0_next),pprimeB) if Nc0_next < 1e5 else np.round(Nc0_next*pprimeB) # Xpprime is the number individuals in the collected eggs/juv's for each genotype
                     ph0_next_perlocus = Xpprime/np.sum(Xpprime) if np.sum(Xpprime) > 0 else np.zeros(self.n_genotypes) # genotype frequency in the hatchery
                     ph0_next.append(ph0_next_perlocus)
                     ## existing cohort genotype frequency
@@ -621,7 +626,7 @@ class Hatchery3_1:
                             pc_perlocus = Kp/np.sum(Kp) if Nh_next > 0 else np.zeros(self.n_genotypes)
                             pc_next.append(pc_perlocus)
                             # ps
-                            psprime_perlocus = (Nh[0]*pc[idx1:idx2] - Kp)/a # Nh*pc[idx1:idx2]= genotype count before stocking, Kp= genotype count after stocking. subtracting the two gives the genotype count of stocked fish.
+                            psprime_perlocus = (np.maximum(Nh[0]*pc[idx1:idx2] - Kp,0))/a # Nh*pc[idx1:idx2]= genotype count before stocking, Kp= genotype count after stocking. subtracting the two gives the genotype count of stocked fish.
                             psprime_perlocus[np.abs(psprime_perlocus) < 1e-10] = 0
                             psprime_perlocus /= np.sum(psprime_perlocus)
                             Kpp = np.random.multinomial(a*self.irphi, psprime_perlocus) if a*self.irphi < 1e5 else np.round(a*self.irphi*psprime_perlocus) # genotype frequency of stocked fish.
@@ -1039,22 +1044,23 @@ class Hatchery3_1:
         avgfallf = (self.fpool_f + self.frun_f)/2 # is the proportion of RGSM in the river segment exposed to sampling
         avgcatch = popsize*avgp*avgfallf*self.thetaf
         p = self.sampler / (avgcatch + self.sampler)
-        cpue = np.array([np.random.negative_binomial(self.sampler, p[i], size=sitenum[i])/avg_effort[i]*100 for i in range(len(sitenum))], dtype=object) # cpue is catch per 100square meters.
+        cpue = np.array([np.random.negative_binomial(self.sampler, p[i], size=sitenum[i])/(self.avgeff_fr[i]+self.avgeff_fp[i])*100 for i in range(len(sitenum))], dtype=object) # cpue is catch per 100square meters.
+
         # test code below (calculates mean cpue for each reach for different reach population sizes)
-        sitenum = np.array([1000, 1000, 1000])
-        popsizes = [10e2, 10e3, 10e4, 10e5, 10e6, 10e7]
-        mcpue = np.zeros((len(popsizes), self.n_reach))
-        for j in range(len(popsizes)):
-            popsize = np.ones(3) * popsizes[j]
-            avgp = np.mean([self.p0, self.p1])
-            avgfallf = (self.fpool_f + self.frun_f)/2 # is the proportion of RGSM in the river segment exposed to sampling
-            avgcatch = popsize*avgp*avgfallf*self.thetaf
-            p = self.sampler / (avgcatch + self.sampler)
-            cpue = np.array([np.random.negative_binomial(self.sampler, p[i], size=sitenum[i])/avg_effort[i]*100 for i in range(len(sitenum))], dtype=object) # cpue is catch per 100square meters.
-            mcpue[j] = np.array([np.mean(cpue[i]) for i in range(len(sitenum))], dtype=object) # mean cpue for each reach
-        print(self.fpool_f)
-        print(self.frun_f)
-        return cpue, mcpue
+        #sitenum = np.array([1000, 1000, 1000])
+        #popsizes = [10e2, 10e3, 10e4, 10e5, 10e6, 10e7]
+        #mcpue = np.zeros((len(popsizes), self.n_reach))
+        #for j in range(len(popsizes)):
+        #    popsize = np.ones(3) * popsizes[j]
+        #    avgp = np.mean([self.p0, self.p1])
+        #    avgfallf = (self.fpool_f + self.frun_f)/2 # is the proportion of RGSM in the river segment exposed to sampling
+        #    avgcatch = popsize*avgp*avgfallf*self.thetaf
+        #    p = self.sampler / (avgcatch + self.sampler)
+        #    cpue = np.array([np.random.negative_binomial(self.sampler, p[i], size=sitenum[i])/avg_effort[i]*100 for i in range(len(sitenum))], dtype=object) # cpue is catch per 100square meters.
+        #    mcpue[j] = np.array([np.mean(cpue[i]) for i in range(len(sitenum))], dtype=object) # mean cpue for each reach
+        #print(self.fpool_f)
+        #print(self.frun_f)
+        return cpue#, mcpue
     
     def production_target(self):
         """
