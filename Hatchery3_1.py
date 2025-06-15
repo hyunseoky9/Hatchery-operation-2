@@ -541,13 +541,16 @@ class Hatchery3_1:
                     # broodstock genotype frequency
                     ## new cohort genotype frequency
                     # genotype frequency of the collected eggs for new cohort.
-                    bias = 0.000001 # percentage of the wild spawners that breeds collected eggs.
-                    gfreqB = np.random.default_rng().multivariate_hypergeometric((gfreq*np.sum(effspawner)).astype(int),(np.ceil(np.sum(effspawner)*bias)).astype(int)) # multivariate hypergeometric dist. is multinomial sampling without replacement.
-                    #gfreqB = np.random.multinomial(np.ceil(np.sum(effspawner)*bias),gfreq)# B for biased sample
-                    gfreqB = gfreqB/np.sum(gfreqB)
-                    allelefreqB = np.array([gfreqB[0]+1/2*gfreqB[1],(gfreqB[2]+1/2*gfreqB[1])])
-                    pprimeB = np.array([allelefreqB[0]**2,2*allelefreqB[0]*allelefreqB[1],allelefreqB[1]**2]) # genotype frequency of the next generation assuming HW eqbm.
-                    Xpprime = np.random.multinomial(int(Nc0_next),pprimeB) if Nc0_next < 1e5 else np.round(Nc0_next*pprimeB) # Xpprime is the number individuals in the collected eggs/juv's for each genotype
+                    bias = 1 # percentage of the wild spawners that breeds collected eggs.
+                    if bias < 1:
+                        gfreqB = np.random.default_rng().multivariate_hypergeometric((gfreq*np.sum(effspawner)).astype(int),(np.ceil(np.sum(effspawner)*bias)).astype(int)) # multivariate hypergeometric dist. is multinomial sampling without replacement.
+                        #gfreqB = np.random.multinomial(np.ceil(np.sum(effspawner)*bias),gfreq)# B for biased sample
+                        gfreqB = gfreqB/np.sum(gfreqB)
+                        allelefreqB = np.array([gfreqB[0]+1/2*gfreqB[1],(gfreqB[2]+1/2*gfreqB[1])])
+                        pprimeB = np.array([allelefreqB[0]**2,2*allelefreqB[0]*allelefreqB[1],allelefreqB[1]**2]) # genotype frequency of the next generation assuming HW eqbm.
+                        Xpprime = np.random.multinomial(int(Nc0_next),pprimeB) if Nc0_next < 1e5 else np.round(Nc0_next*pprimeB) # Xpprime is the number individuals in the collected eggs/juv's for each genotype
+                    else:
+                        Xpprime = np.random.multinomial(int(Nc0_next),pprime) if Nc0_next < 1e5 else np.round(Nc0_next*pprime) # Xpprime is the number individuals in the collected eggs/juv's for each genotype
                     ph0_next_perlocus = Xpprime/np.sum(Xpprime) if np.sum(Xpprime) > 0 else np.zeros(self.n_genotypes) # genotype frequency in the hatchery
                     ph0_next.append(ph0_next_perlocus)
                     ## existing cohort genotype frequency
