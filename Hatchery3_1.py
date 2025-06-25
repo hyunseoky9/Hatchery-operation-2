@@ -32,6 +32,7 @@ class Hatchery3_1:
         paramdf = pd.read_csv(parameterization_set_filename)
         self.n_reach = 3
         self.alpha = paramdf['alpha'][self.parset] 
+        self.alphavar = paramdf['alphavar'][self.parset]
         self.beta = paramdf['beta'][self.parset] 
         self.Lmean = paramdf['Lmean'][self.parset]
         self.mu = np.array([paramdf['mu_a'][self.parset],paramdf['mu_i'][self.parset],paramdf['mu_s'][self.parset]])
@@ -101,8 +102,8 @@ class Hatchery3_1:
             with open('LC_GAM_San Acacia.pkl','rb') as handle:
                 self.LC_SA = pickle.load(handle)
         # range for each variables
-        self.N0minmax = [0,10e7] 
-        self.N1minmax = [0,10e7] # N1 and N1 minmax are the total population minmax.
+        self.N0minmax = [0,1e7] 
+        self.N1minmax = [0,1e7] # N1 and N1 minmax are the total population minmax.
         self.Nhminmax = [0, 300000]
         self.Ncminmax = [0, (self.eggcollection_max+self.larvaecollection_max)*4] # Nc is the number of larvae in the hatchery.
         self.Nc0minmax = [0, (self.eggcollection_max+self.larvaecollection_max)*4]
@@ -443,18 +444,21 @@ class Hatchery3_1:
                 L = self.q2LC(q)
                 extra_info['L'] = L
                 kappa = np.exp(self.beta*(L - self.Lmean) + np.random.normal(self.mu, self.sd))
+                extra_info['kappa'] = kappa
                 effspawner = N0 + self.beta_2*N1 # effective number of spawners
                 P = (self.alpha*effspawner)/(1 + self.alpha*effspawner/kappa)
                 M0 = np.exp(np.random.normal(self.lM0mu, self.lM0sd))
                 M1 = np.exp(np.random.normal(self.lM1mu, self.lM1sd))
-                summer_mortality = np.exp(-124*M0)*((1 - delfall) + self.tau*deldiff + (1 - self.tau)*self.r0*self.phidiff)
+                summer_mortality = np.exp(-124*M0)*((1 - delfall) + self.tau*delfall*deldiff + (1 - self.tau)*self.r0*self.phidiff)
                 extra_info['summer_mortality'] = summer_mortality
-                N0_next = np.minimum(P*np.exp(-124*M0)*((1 - delfall) + self.tau*deldiff + (1 - self.tau)*self.r0*self.phidiff),np.ones(self.n_reach)*self.N0minmax[1])
+                N0_next = np.minimum(P*np.exp(-124*M0)*((1 - delfall) + self.tau*delfall*deldiff + (1 - self.tau)*self.r0*self.phidiff),np.ones(self.n_reach)*self.N0minmax[1])
                 N1_next = np.minimum((N0+N1)*np.exp(-215*M1)*((1-delfall) + self.tau*delfall + (1 - self.tau)*self.r1*self.phifall),np.ones(self.n_reach)*self.N1minmax[1])
                 # hatchery stuff (Nh, Nc, Nc0)
                 needed = 2*a/(np.dot(self.b,self.fc)) # amount of f0 needed to produce 'a' fish
                 Nh_next = a + 10 # added 10 so that there's no small discrepancy that doesn't allow stocking the produced amount in the fall.
                 if np.any(Nc - needed*self.b < 0):
+                    print(f'need {-(Nc - needed*self.b)} more fish')
+
                     newb = self.b.copy()
                     left = a
                     Nc_next = Nc.copy()
@@ -612,7 +616,7 @@ class Hatchery3_1:
                 # demographic stuff
                 if a - Nh <= 1e-7: # valid action choice. stocking is less than the hatchery population size.
                     N0_next = N0.copy()
-                    N0_next[t-1] = np.minimum(N0_next[t-1] + a,self.N0minmax[1]) # stocking angostura (t=1) or isleta (t=2) in the fall
+                    N0_next[t-1] = np.minimum(N0_next[t-1] + a*self.irphi,self.N0minmax[1]) # stocking angostura (t=1) or isleta (t=2) in the fall
                     N1_next = N1.copy()
                     Nh_next = Nh[0] - a
                     Nc0_next = Nc0.copy()
@@ -697,7 +701,7 @@ class Hatchery3_1:
                 if a - Nh <= 1e-7: # valid action choice. stocking is less than the hatchery population size.
                     Mw = np.exp(np.random.normal(self.lMwmu, self.lMwsd))
                     N0_next = N0.copy()
-                    N0_next[t-1] = N0_next[t-1] + a # stocking san acacia (t=3) in the fall
+                    N0_next[t-1] = N0_next[t-1] + a*self.irphi # stocking san acacia (t=3) in the fall
                     N0_next = np.minimum(N0_next*np.exp(-150*Mw),np.ones(self.n_reach)*self.N0minmax[1]) # stocking san acacia (t=3) in the fall
                     N1_next = N1*np.exp(-150*Mw)
                     Nh_next = 0
