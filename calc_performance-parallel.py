@@ -120,7 +120,7 @@ def worker(Q, policy, episodenum, workerepisodenum, worker_id, envinit_params, t
                             managed = 1
                         if action == 2:
                             surveyed = 1
-                    elif env.envID in ['Env2.0','Env2.1','Env2.2','Env2.3','Env2.4','Env2.5','Env2.6','Hatchery3.0']:
+                    elif env.envID in ['Env2.0','Env2.1','Env2.2','Env2.3','Env2.4','Env2.5','Env2.6','Hatchery3.0','Hatchery3.1','Hatchery3.2']:
                         actiondist[action] += 1
                 else: # DQN
                     action = choose_action(stack,Q,0,action_size,distributional,device, drqn, hx, prev_a)
@@ -140,7 +140,7 @@ def worker(Q, policy, episodenum, workerepisodenum, worker_id, envinit_params, t
 
     # additional policy related info update
     with policy_info['lock']:  
-        if env.envID in ['Env2.0','Env2.1','Env2.2','Env2.3','Env2.4','Env2.5','Env2.6','Hatchery3.0','Hatchery3.1']:
+        if env.envID in ['Env2.0','Env2.1','Env2.2','Env2.3','Env2.4','Env2.5','Env2.6','Hatchery3.0','Hatchery3.1','Hatchery3.2']:
             policy_info['actiondist'].add_(actiondist) # Directly update shared tensor\
         if env.envID == 'tiger':
             if policy_info['surveyed'].value == 0:

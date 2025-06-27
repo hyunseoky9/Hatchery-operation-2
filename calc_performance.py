@@ -15,8 +15,8 @@ def calc_performance(env, device, seed, configdict, Q=None, policy=None, episode
     print('serial calc_performance called')
     managed = 0 # for tiger environment
     surveyed = 0 # for tiger environment
-    if env.envID in ['Env2.0','Env2.1','Env2.2','Env2.3','Env2.4','Env2.5','Env2.6','Hatcher3.0','Hatchery3.1']:
-        actiondist = np.zeros(env.actionspace_dim[0])
+    if env.envID in ['Env2.0','Env2.1','Env2.2','Env2.3','Env2.4','Env2.5','Env2.6','Hatcher3.0','Hatchery3.1','Hatchery3.2']:
+        actiondist = np.zeros(env.actionspace_dim[0]) # distribution of actions taken
     avgrewards = 0
     action_size = env.actionspace_dim[0]
     if Q is not None:
@@ -54,12 +54,12 @@ def calc_performance(env, device, seed, configdict, Q=None, policy=None, episode
                             managed = 1
                         if action == 2:
                             surveyed = 1
-                    elif env.envID in ['Env2.0','Env2.1','Env2.2','Env2.3','Env2.4','Env2.5','Env2.6','Hatchery3.0','Hatchery3.1']:
+                    elif env.envID in ['Env2.0','Env2.1','Env2.2','Env2.3','Env2.4','Env2.5','Env2.6','Hatchery3.0','Hatchery3.1','Hatchery3.2']:
                         actiondist[action] += 1
                 else: # DQN
                     mask = env._compute_mask()
                     action = choose_action(stack,Q,0,action_size,distributional,device, drqn, hx, prev_a, mask)
-                    if env.envID in ['Env2.0','Env2.1','Env2.2','Env2.3','Env2.4','Env2.5','Env2.6','Hatchery3.0','Hatchery3.1']:
+                    if env.envID in ['Env2.0','Env2.1','Env2.2','Env2.3','Env2.4','Env2.5','Env2.6','Hatchery3.0','Hatchery3.1','Hatchery3.2']:
                         actiondist[action] += 1
                 # * state increase in size by 1 due to adding previous action in choose_action, but it will get overwritten in the next iteration
                 previous_action = action
@@ -80,7 +80,7 @@ def calc_performance(env, device, seed, configdict, Q=None, policy=None, episode
             print('management was done')
         if surveyed == 1:
             print('survey was done')
-    elif env.envID in ['Env2.0','Env2.1','Env2.2','Env2.3','Env2.4','Env2.5','Env2.6','Hatchery3.0','Hatchery3.1']:
+    elif env.envID in ['Env2.0','Env2.1','Env2.2','Env2.3','Env2.4','Env2.5','Env2.6','Hatchery3.0','Hatchery3.1','Hatchery3.2']:
         actiondist = actiondist/np.sum(actiondist)
         print(actiondist)
     return avgrewards/episodenum

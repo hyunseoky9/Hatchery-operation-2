@@ -127,7 +127,7 @@ class Hatchery3_2:
         delmid_values = (intervals[:-1] + intervals[1:]) / 2 # get the mid value for each bin
         deldiffavg = np.zeros(self.n_reach)
         deldiffavg[1:] = self.deldiff[0,1:] / np.sum(self.deldiff,axis=0)[1:] # average value for deldiff. angostura value is 0
-        
+
         ## get expected survival rates for age1+ and age 0
         M0 = np.exp(self.lM0mu)
         M1 = np.exp(self.lM1mu)
@@ -140,6 +140,12 @@ class Hatchery3_2:
         self.sa = np.exp(-124*M1 - 150*Mw)*((1 - delfall) + self.tau*delfall + (1 - self.tau)*self.r1*np.mean(self.phifall))
         self.sj =  np.prod(self.sj,axis=1)**(1/self.sj.shape[1]) # geometric mean of sj
         self.sa =  np.prod(self.sa,axis=1)**(1/self.sa.shape[1]) # geometric mean of sa
+
+        ## get average of age 2+ fish 
+        self.avgsa = np.sum(self.sa * self.combo_delfallprob)
+        self.AVGage_of_age2plus = 2*(1/(1+self.avgsa)) + 3*(self.avgsa/(1+self.avgsa)) # assume that the fish only lives till age 3
+        
+
 
         # range for each variables
         self.N0minmax = [0,1e7] 
@@ -157,7 +163,7 @@ class Hatchery3_2:
         self.N1_dim = (self.n_reach)
         self.Nh_dim = (1)
         self.Nb_dim = (1)
-        self.p_dim = (1)
+        self.p_dim = (self.n_reach)
         self.q_dim = (1)
         self.Ne_dim = (1)
         self.t_dim = (1)
@@ -222,6 +228,7 @@ class Hatchery3_2:
     def reset(self, initstate=None):
         if type(initstate) is not np.ndarray:
             initstate = np.ones(len(self.statevar_dim))*-1
+            initstate[-1] = 0 # start from spring if initstate is not provided
         
         # Initialize state variables
         new_state = []
@@ -271,7 +278,7 @@ class Hatchery3_2:
                 new_obs.append(initstate[3])
             # p
             if initstate[4] == -1:
-                pval = [np.log(0 + 1)] # nothing's been stocked in the beginning
+                pval = np.ones(self.n_reach)*np.log(0 + 1) # nothing's been stocked in the beginning
                 new_state.append(pval)
                 new_obs.append(pval)
             else:
@@ -337,7 +344,7 @@ class Hatchery3_2:
                 new_obs.append(initstate[3])
             # p
             if initstate[4] == -1:
-                pval = [np.log(0 + 1)] # nothing's been stocked in the beginning
+                pval = np.ones(self.n_reach)*np.log(0 + 1) # nothing's been stocked in the beginning
                 new_state.append(pval)
                 new_obs.append(pval)
             else:
@@ -363,9 +370,11 @@ class Hatchery3_2:
                 new_obs.append(initstate[3])
         # Ne & ONe
         if self.discset == -1:
-            Neval,_,_ = self.NeCalc(np.exp(N0val)-1, np.exp(N1val)-1, pval[0], Nbval[0],kappa)
+            Neval = np.array([np.sum(np.exp(N0val)-1 + np.exp(N1val)-1)*0.6])
+            #Neval,_,_ = self.NeCalc(np.exp(N0val)-1, np.exp(N1val)-1, pval[0], Nbval[0])
         else:
-            Neval,_,_ = self.NeCalc(np.exp(N0val)-1, np.exp(N1val)-1, pval, Nbval,kappa)
+            Neval = np.array([np.sum(np.exp(N0val)-1 + np.exp(N1val)-1)*0.6])
+            #Neval,_,_ = self.NeCalc(np.exp(N0val)-1, np.exp(N1val)-1, pval, Nbval)
             Neval = self._discretize_idx(Neval, self.states['Ne'])
         new_state.append(np.log(Neval+1))
         new_obs.append(np.log(Neval+1))
@@ -416,19 +425,22 @@ class Hatchery3_2:
                 kappa = np.exp(self.beta*(L - self.Lmean) + np.random.normal(self.mu, self.sd))
                 extra_info['kappa'] = kappa
                 effspawner = N0 + self.beta_2*N1 # effective number of spawners
+                P1 = (self.alpha*N0)/(1 + self.alpha*effspawner/kappa) # number of recruits produced by age 1 fish that newly became adults
+                P2 = (self.alpha*self.beta_2*N1)/(1 + self.alpha*effspawner/kappa) # number of recruits produced by age 2+ fish
                 P = (self.alpha*effspawner)/(1 + self.alpha*effspawner/kappa)
                 M0 = np.exp(np.random.normal(self.lM0mu, self.lM0sd))
                 M1 = np.exp(np.random.normal(self.lM1mu, self.lM1sd))
+                genT = (np.sum(P1) + np.sum(P2)*self.AVGage_of_age2plus)/np.sum(P)  # generation time
                 summer_mortality = np.exp(-124*M0)*((1 - delfall) + self.tau*delfall*deldiff + (1 - self.tau)*self.r0*self.phidiff)
                 extra_info['summer_mortality'] = summer_mortality
                 N0_next = np.minimum(P*np.exp(-124*M0)*((1 - delfall) + self.tau*delfall*deldiff + (1 - self.tau)*self.r0*self.phidiff),np.ones(self.n_reach)*self.N0minmax[1])
                 N1_next = np.minimum((N0+N1)*np.exp(-215*M1)*((1-delfall) + self.tau*delfall + (1 - self.tau)*self.r1*self.phifall),np.ones(self.n_reach)*self.N1minmax[1])
                 # hatchery stuff (Nh, Nc, Nc0)
                 Nh_next = a + 10 # added 10 so that there's no small discrepancy that doesn't allow stocking the produced amount in the fall.
-                Nb_next = a/self.fc[1] # number of broodstock needed to produce 'a' fish self.fc[1]=number of fish produced per age 2 broodstock
-                p_next = 0 
+                Nb_next = 2*a/self.fc[1] # number of broodstock needed to produce 'a' fish self.fc[1]=number of fish produced per age 2 female broodstock, which is multiplied by 2 b/c you need male and female.
+                p_next = np.zeros(self.n_reach)
                 # hydrological stuff. No springflow in fall (stays the same)
-                Ne_next, Neh, New = self.NeCalc(N0,N1,p,Nb,kappa)
+                Ne_next, Neh, New = self.NeCalc(N0,N1,p,Nb,kappa,genT)
                 extra_info['Ne'] = Ne_next
                 extra_info['Neh'] = Neh
                 extra_info['New'] = New
@@ -441,7 +453,7 @@ class Hatchery3_2:
                     logN1_next = np.log(N1_next+1)
                     logNh_next = [np.log(Nh_next+1)]
                     logNb_next = [np.log(Nb_next+1)]
-                    logp_next = [np.log(p_next+1)]
+                    logp_next = np.log(p_next+1)
                     logNe_next = np.log(Ne_next+1)
                     OlogNe_next = logNe_next
                     self.state = list(np.concatenate([logN0_next, logN1_next, logNh_next, logNb_next, logp_next, np.array(self.state)[self.sidx["logq"]], logNe_next, t_next]))
@@ -466,7 +478,8 @@ class Hatchery3_2:
                     N0_next[t-1] = np.minimum(N0_next[t-1] + a*self.irphi,self.N0minmax[1]) # stocking angostura (t=1) or isleta (t=2) in the fall
                     N1_next = N1.copy()
                     Nh_next = Nh[0] - a
-                    p_next = p + a*self.irphi*np.exp(-150*np.exp(self.lMwmu[t-1])) # stocking angostura (t=1) or isleta (t=2) in the fall
+                    p_next = p.copy()
+                    p_next[t-1] = p[t-1] + a*self.irphi # stocking angostura (t=1) or isleta (t=2) in the fall
                     # reward & done
                     reward = self.extant
                     done = False
@@ -474,7 +487,8 @@ class Hatchery3_2:
                     N0_next = N1_next = np.zeros(self.n_reach)
                     Nh_next = 0
                     Nb_next = Nb.copy()
-                    p_next = p + a*self.irphi*np.exp(-150*np.exp(self.lMwmu[t-1]))
+                    p_next = p.copy()
+                    p_next[t-1] = p[t-1] + a*self.irphi # stocking angostura (t=1) or isleta (t=2) in the fall
                     # reward & done
                     reward = 0
                     done = True
@@ -487,8 +501,9 @@ class Hatchery3_2:
                     logN0_next = np.log(N0_next+1)
                     logN1_next = np.log(N1_next+1)
                     logNh_next = [np.log(Nh_next+1)]
-                    self.state = list(np.concatenate([logN0_next, logN1_next, logNh_next, np.array(self.state)[self.sidx["logNb"]], np.array(self.state)[self.sidx["logp"]], np.array(self.state)[self.sidx["logq"]], np.array(self.state)[self.sidx["logNe"]], t_next]))
-                    self.obs = list(np.concatenate([logN0_next, logN1_next, logNh_next, np.array(self.obs)[self.oidx["OlogNb"]], np.array(self.obs)[self.oidx["Ologp"]],np.array(self.obs)[self.oidx["logqhat"]], np.array(self.obs)[self.oidx["OlogNe"]], t_next]))
+                    logp_next = np.log(p_next+1)
+                    self.state = list(np.concatenate([logN0_next, logN1_next, logNh_next, np.array(self.state)[self.sidx["logNb"]], logp_next, np.array(self.state)[self.sidx["logq"]], np.array(self.state)[self.sidx["logNe"]], t_next]))
+                    self.obs = list(np.concatenate([logN0_next, logN1_next, logNh_next, np.array(self.obs)[self.oidx["OlogNb"]], logp_next,np.array(self.obs)[self.oidx["logqhat"]], np.array(self.obs)[self.oidx["OlogNe"]], t_next]))
                 else:
                     N0_next_idx = [self._discretize_idx(val, self.states['N0']) for val in N0_next]
                     N1_next_idx = [self._discretize_idx(val, self.states['N1']) for val in N1_next]
@@ -510,14 +525,18 @@ class Hatchery3_2:
                     N0_next = np.minimum(N0_next*np.exp(-150*Mw),np.ones(self.n_reach)*self.N0minmax[1]) # stocking san acacia (t=3) in the fall
                     N1_next = N1*np.exp(-150*Mw)
                     Nh_next = 0
-                    p_next = p + a*self.irphi*np.exp(-150*np.exp(self.lMwmu[t-1]))
+                    p_next = p.copy()
+                    p_next[t-1] = p[t-1] + a*self.irphi # stocking angostura (t=1) or isleta (t=2) in the fall
+                    p_next = p_next*np.exp(-150*Mw)
                     # reward & done
                     reward = self.extant
                     done = False
                 else:
                     N0_next = N1_next = np.zeros(self.n_reach)
                     Nh_next = 0
-                    p_next = p + a*self.irphi*np.exp(-150*np.exp(self.lMwmu[t-1]))
+                    p_next = p.copy()
+                    p_next[t-1] = p[t-1] + a*self.irphi # stocking angostura (t=1) or isleta (t=2) in the fall
+                    p_next = p_next*np.exp(-150*Mw)
                     # reward & done
                     reward = 0
                     done = True
@@ -530,7 +549,7 @@ class Hatchery3_2:
                     logN0_next = np.log(N0_next+1)
                     logN1_next = np.log(N1_next+1)
                     logNh_next = np.array([np.log(Nh_next+1)])
-                    logp_next = np.array([np.log(p_next[0]+1)])
+                    logp_next = np.log(p_next+1)
                     logq_next = np.array([np.log(q_next+1)])
                     logqhat_next = np.array([np.log(qhat_next+1)])
                     self.state = list(np.concatenate([logN0_next, logN1_next, logNh_next, np.array(self.state)[self.sidx["logNb"]], logp_next, logq_next, np.array(self.state)[self.sidx["logNe"]], t_next]))
@@ -539,11 +558,11 @@ class Hatchery3_2:
                     N0_next_idx = [self._discretize_idx(val, self.states['N0']) for val in N0_next]
                     N1_next_idx = [self._discretize_idx(val, self.states['N1']) for val in N1_next]
                     Nh_next_idx = [self._discretize_idx(Nh_next, self.states['Nh'])]
-                    p_next_idx = [self._discretize_idx(Nh_next, self.states['p'])]
+                    p_next_idx = [self._discretize_idx(val, self.states['p']) for val in p_next]
                     q_next_idx = [self._discretize_idx(q_next, self.states['q'])]
                     qhat_next_idx = [self._discretize_idx(qhat_next, self.observations['qhat'])]
                     t_next_idx = t_next
-                    self.state = list(np.concatenate([N0_next_idx, N1_next_idx, Nh_next_idx, np.array(self.state)[self.sidx["Nb"]], p_next_idx, q_next_idx, p_next_idx, np.array(self.state)[self.sidx["Ne"]], t_next_idx]).astype(int))
+                    self.state = list(np.concatenate([N0_next_idx, N1_next_idx, Nh_next_idx, np.array(self.state)[self.sidx["Nb"]], p_next_idx, q_next_idx, np.array(self.state)[self.sidx["Ne"]], t_next_idx]).astype(int))
                     self.obs = list(np.concatenate([N0_next_idx, N1_next_idx, Nh_next_idx,  np.array(self.obs)[self.oidx["ONb"]], p_next_idx, qhat_next_idx, np.array(self.obs)[self.oidx["ONe"]], t_next_idx]).astype(int))
         else: # extinct
             reward = 0
@@ -562,7 +581,7 @@ class Hatchery3_2:
                 "N1": list(np.linspace(self.N1minmax[0], self.N1minmax[1], 31)), # population size (3)
                 "Nh": list(np.linspace(self.Nhminmax[0], self.Nhminmax[1], 11)), # hatchery population size (1)
                 "Nb": list(np.linspace(self.Nbminmax[0], self.Nbminmax[1], 11)), # hatchery population size (1)
-                "p": list(np.linspace(self.pminmax[0], self.pminmax[1], 11)), # hatchery population size (1)
+                "p": list(np.linspace(self.pminmax[0], self.pminmax[1], 11)), # hatchery population size (3)
                 "q": list(np.linspace(self.qminmax[0], self.qminmax[1], 11)), # spring flow in Otowi (1)
                 "Ne": list(np.linspace(self.Neminmax[0], self.Neminmax[1], 11)), # heterozygosity (1)
                 "t": list(np.arange(self.tminmax[0], self.tminmax[1] + 1, 1)), # time (1)
@@ -587,7 +606,7 @@ class Hatchery3_2:
                 "logN1": list(np.log(np.array(self.N1minmax)+1)), # log population size (3)
                 "logNh": list(np.log(np.array(self.Nhminmax)+1)), # log hatchery population size (1)
                 "logNb": list(np.log(np.array(self.Nbminmax)+1)), # log number of broodstock used for production
-                "logp": list(np.log(np.array(self.pminmax)+1)), # Total number of fish stocked in a season that make it to breeding season (1)
+                "logp": list(np.log(np.array(self.pminmax)+1)), # Total number of fish stocked in a season that make it to breeding season (3)
                 "logq": list(np.log(np.array(self.qminmax)+1)), # log spring flow in Otowi (Otowi) (1)
                 "logNe": self.Neminmax, # heterozygosity (1)
                 "t": self.tminmax # time (1)
@@ -862,17 +881,14 @@ class Hatchery3_2:
         mask = np.zeros((states.shape[0], len(self.actions['a'])), dtype=int)
         # in spring, you can't produce more than what the broodstock size can produce
         if np.sum(springidx) > 0:
-            cohorts = np.atleast_2d(np.exp(states[np.ix_(np.flatnonzero(springidx),self.oidx['OlogNc'])])-1)
-            max_production = np.sum((cohorts*self.b*self.fc), axis=1)
-            springlegal = max_production[:,None] >= self.actions['a']
-            mask[springidx] = springlegal
+            mask[springidx] = np.ones(len(self.actions['a'])).astype(int)
         if np.sum(fallidx) > 0: # in fall, you cannot stock more than what's in the hatchery.
             hatchery = np.atleast_2d(np.exp(states[np.ix_(np.flatnonzero(fallidx),self.oidx['OlogNh'])]))
             falllegal = hatchery - 1 >= self.actions['a']
             mask[fallidx] = falllegal
         return mask.astype(int)
 
-    def NeCalc(self, N0, N1, p, Nb):
+    def NeCalc(self, N0, N1, p, Nb, kappa, genT):
         """
         Calculate the effective population size (Ne). 
         intput:
@@ -903,19 +919,29 @@ class Hatchery3_2:
                     recruitvar = np.sum((bvals[:,1:] - b[:,None])**2 * np.tile(self.alphaprob[None,:], (25,1)),axis=1) # sigma^2 in Myhre et al. 2016, variance in the number of recruits produced by a single spawner (basically variance of B where mean is b)
                     grate = self.sa + b/2 # definition of lambda in Myhre et al. 2016
                     var_dg = self.sa*(1-self.sa) + b/4 + recruitvar/4  # sigma^2_dg in Myhre et al. 2016
+                    # calculate the expected generation time in pg 2433 of # Myhre et al. 2016
+                    #genT +=  np.sum(grate/(grate - self.sa) * self.lkappa_prob[lkappaaidx, lkappaiidx] * self.combo_delfallprob) # generation time given the population size
                     # calculate the factor in eq 4 of myhre et al. 2016
                     factor += np.sum(var_dg/(grate**2) * self.lkappa_prob[lkappaaidx, lkappaiidx] * self.combo_delfallprob)
+        if 1/factor > 1.5:
+            fo = 0
         New = (totN0+totN1)/factor
+        New = New / genT # generation time adjusted wild Ne.
+
         # calculate hatchery population's Ne
-        if p == 0:
+        if np.sum(p) == 0: # if no fish are stocked, then Ne = New
             Ne = np.array([New])
             Neh = np.array([0])
         else:
-            #stocked_cont = # stocked fish contribution
-            #wild_cont =  # wild fish contribution
-            x = p/totN0
+            effspawner = N0 + self.beta_2*N1 # effective number of spawners
+            stocked_cont = np.sum((self.alpha*p)/(1 + self.alpha*effspawner/kappa)) # stocked fish contribution
+            total_cont =  np.sum((self.alpha*(effspawner - p))/(1 + self.alpha*effspawner/kappa)) # wild fish contribution
+            x = stocked_cont/total_cont
             mu_k = self.fc[1]*self.irphi*np.exp(-150*np.prod(np.exp(self.lMwmu))**(1/3))
-            Neh = np.maximum(mu_k*(2*Nb - 1)/4, 0) # variance effective population size of hatchery population
+            #Neh = np.maximum(mu_k*(2*Nb - 1)/4, 0) # variance effective population size of hatchery population
+            Neh = Nb
             # apply Ryman-Laikre effect to calculate effective population size
+            if Neh == 0 or New == 0 or (x**2/Neh + (1-x)**2/(New))==0:
+                foo = 0
             Ne = 1/(x**2/Neh + (1-x)**2/(New))
         return Ne, Neh, New

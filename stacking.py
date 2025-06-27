@@ -5,7 +5,7 @@ def stacking(env, stack, next_state):
     """
     try:
         if env.special_stacking == True:
-            if env.envID in ['Hatchery3.0','Hatchery3.1']:
+            if env.envID in ['Hatchery3.0','Hatchery3.1','Hatchery3.2']:
                 if env.state[env.sidx['t'][0]] in [0,1]:
                     return stack[len(next_state):] + next_state
                 else:
