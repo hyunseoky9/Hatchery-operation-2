@@ -1,14 +1,15 @@
 import numpy as np
 class RunningMeanStd:
-    def __init__(self, shape, momentum=0.999, eps=1e-4):
+    def __init__(self, shape, updateN, momentum=0.999, eps=1e-4):
         self.mean  = np.zeros(shape, np.float32)
         self.var   = np.ones(shape,  np.float32)
         self.count = eps
         self.m     = momentum
         self.stored_batch = []
         self.rolloutnum = 0
+        self.updateN = updateN # Number of samples to collect before updating the mean and variance
 
-    def update(self, x):
+    def update(self):
         # Chen et al. parallel batch normalization
         x = np.array(self.stored_batch)
         batch_mean = x.mean(0)
@@ -31,6 +32,7 @@ class RunningMeanStd:
 
         # empty the stored batch
         self.stored_batch = []
+        self.rolloutnum = 0
 
     def normalize(self, x):
         return (x - self.mean) / np.sqrt(self.var + 1e-8)

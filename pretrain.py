@@ -2,7 +2,7 @@ import numpy as np
 from absorbing import *
 from stacking import *
 
-def pretrain(env, nq, memory, max_steps, batch_size, PrioritizedReplay, max_priority, postterm_len, fstack):
+def pretrain(env, nq, memory, max_steps, batch_size, PrioritizedReplay, max_priority, postterm_len, fstack, standardize, rms):
     # Make a bunch of random actions from a random state and store the experiences
     reset = True
     memadd = 0 # number of transitions added to memory
@@ -34,9 +34,26 @@ def pretrain(env, nq, memory, max_steps, batch_size, PrioritizedReplay, max_prio
             done = True
         t += 1
         if env.partial == False:
-            next_state = env.state
+            if standardize:
+                rms.stored_batch.append(env.obs)
+                normstate = rms.normalize(env.obs)
+                rms.rolloutnum += 1
+                if rms.rolloutnum >= rms.updateN:
+                    rms.update()
+            else:
+                normstate = env.obs
+            next_state = normstate
         else:
-            next_state = env.obs
+            if standardize:
+                rms.stored_batch.append(env.obs)
+                normstate = rms.normalize(env.obs)
+                rms.rolloutnum += 1
+                if rms.rolloutnum >= rms.updateN:
+                    rms.update()
+            else:
+                normstate = env.obs
+            next_state = normstate
+            
         next_stack = stacking(env,stack,next_state)
         if done:
             nq.add(stack, action, reward, next_stack, done, previous_action, memory, PrioritizedReplay)

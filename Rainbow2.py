@@ -134,7 +134,7 @@ def Rainbow2(env,paramdf, meta):
 
  
     ## running mean normalization set up
-    rms = RunningMeanStd(len(env.observation_space)) if standardize else None
+    rms = RunningMeanStd(len(env.observation_space), max_steps) if standardize else None
 
     ## minmax normalization parameters
     if env.contstate == False:
@@ -217,10 +217,10 @@ def Rainbow2(env,paramdf, meta):
     if PrioritizedReplay:
         memory = PMemory(memory_size, alpha, per_epsilon, max_abstd)
         beta = beta0
-        pretrain(env,nq,memory,max_steps,batch_size,PrioritizedReplay,memory.max_abstd,postterm_len,fstack) # prepopulate memory
+        pretrain(env,nq,memory,max_steps,batch_size,PrioritizedReplay,memory.max_abstd,postterm_len,fstack, standardize, rms) # prepopulate memory
     else:
         memory = Memory(memory_size, state_size*fstack, len(env.actionspace_dim))
-        pretrain(env,nq,memory,max_steps,batch_size,PrioritizedReplay,0,postterm_len,fstack) # prepopulate memory
+        pretrain(env,nq,memory,max_steps,batch_size,PrioritizedReplay,0,postterm_len,fstack, standardize, rms) # prepopulate memory
     print(f'Pretraining memory with {batch_size} experiences (buffer size: {memory_size})')
 
     ## state initialization setting 
@@ -282,7 +282,6 @@ def Rainbow2(env,paramdf, meta):
                 a = np.random.choice(np.flatnonzero(mask)) # first action in the episode is random for added exploration
             true_state = env.state
             reward, done, _ = env.step(a) # take a step
-            
             if env.episodic == False and env.absorbing_cut == True: # if continuous task and absorbing state is defined
                 if absorbing(env,true_state) == True: # terminate shortly after the absorbing state is reached.
                     termination_t += 1
@@ -291,11 +290,27 @@ def Rainbow2(env,paramdf, meta):
             if t >= max_steps: # finish episode if max steps reached even if terminal state not reached
                 done = True
             if env.partial == False:
-                next_stack = stacking(env,stack,env.state)
+                if standardize: 
+                    rms.stored_batch.append(env.state)
+                    normstate = rms.normalize(env.state)
+                    rms.rolloutnum += 1
+                    if rms.rolloutnum >= rms.updateN:
+                        rms.update()
+                else:
+                    normstate = env.state
+                next_stack = stacking(env,stack,normstate)
                 nq.add(stack, a, reward, next_stack, done, previous_a, memory, PrioritizedReplay) # add transition to queue
                 S = env.state #  update state
             else:
-                next_stack = stacking(env,stack,env.obs)
+                if standardize:
+                    rms.stored_batch.append(env.obs)
+                    normstate = rms.normalize(env.obs)
+                    rms.rolloutnum += 1
+                    if rms.rolloutnum >= rms.updateN:
+                        rms.update()
+                else:
+                    normstate = env.obs
+                next_stack = stacking(env,stack,normstate)
                 nq.add(stack, a, reward, next_stack, done, previous_a, memory, PrioritizedReplay)
                 S = env.obs
             stack = next_stack
