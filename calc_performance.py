@@ -4,7 +4,7 @@ import torch
 import torch.multiprocessing as mp
 from choose_action import choose_action
 from choose_action_a3c import choose_action_a3c
-def calc_performance(env, device, seed, configdict, Q=None, policy=None, episodenum=1000, t_maxstep = 1000, drqn=False, actioninput=False):
+def calc_performance(env, device, seed, configdict, rms, Q=None, policy=None, episodenum=1000, t_maxstep = 1000, drqn=False, actioninput=False):
     """
     non-parallelized version.
     calculate the performance of the agent in the environment.
@@ -48,7 +48,7 @@ def calc_performance(env, device, seed, configdict, Q=None, policy=None, episode
                 prev_a = previous_action if actioninput else None
                 if drqn == True: #DRQN
                     mask = env._compute_mask()
-                    action, hx = choose_action(state,Q,0,action_size,distributional,device, drqn, hx, prev_a, mask)
+                    action, hx = choose_action(state,Q,0,action_size,distributional,device, rms, drqn, hx, prev_a, mask)
                     if env.envID == 'tiger':
                         if action == 1:
                             managed = 1
@@ -58,7 +58,7 @@ def calc_performance(env, device, seed, configdict, Q=None, policy=None, episode
                         actiondist[action] += 1
                 else: # DQN
                     mask = env._compute_mask()
-                    action = choose_action(stack,Q,0,action_size,distributional,device, drqn, hx, prev_a, mask)
+                    action = choose_action(stack,Q,0,action_size,distributional,device, rms, drqn, hx, prev_a, mask)
                     if env.envID in ['Env2.0','Env2.1','Env2.2','Env2.3','Env2.4','Env2.5','Env2.6','Hatchery3.0','Hatchery3.1','Hatchery3.2']:
                         actiondist[action] += 1
                 # * state increase in size by 1 due to adding previous action in choose_action, but it will get overwritten in the next iteration
@@ -68,6 +68,7 @@ def calc_performance(env, device, seed, configdict, Q=None, policy=None, episode
                 if policy.type == 'A3C':
                     action, hx = choose_action_a3c(state,policy,hx)
                 previous_action = action
+            
             reward, done, _ = env.step(action)
             rewards += reward
             if t >= (t_maxstep - 1):

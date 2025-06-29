@@ -2,12 +2,15 @@ import torch
 import random
 import numpy as np
 
-def choose_action(state, Q, epsilon, action_size, distributional,device, drqn=False, hidden=None, previous_action=None,mask=None):
+def choose_action(state, Q, epsilon, action_size, distributional,device, rms, drqn=False, hidden=None, previous_action=None,mask=None):
     if previous_action is not None:
         state_ = state.copy()
         state_.append(previous_action)
     else:
         state_ = state
+    if rms is not None:
+        state_ = rms.normalize(state_)
+    
     # Choose an action
     if random.random() < epsilon:
         action = np.random.choice(np.flatnonzero(mask))

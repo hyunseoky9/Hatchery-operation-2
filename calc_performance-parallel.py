@@ -5,7 +5,7 @@ import torch
 import torch.multiprocessing as mp
 from choose_action import choose_action
 from choose_action_a3c import choose_action_a3c
-def calc_performance(env, device, seed, config, Q=None, policy=None, episodenum=1000, t_maxstep=1000, drqn=False, actioninput=False):
+def calc_performance(env, device, seed, config, rms, Q=None, policy=None, episodenum=1000, t_maxstep=1000, drqn=False, actioninput=False):
     """
     parallelized version
     calculate the performance of the agent in the environment.
@@ -50,7 +50,7 @@ def calc_performance(env, device, seed, config, Q=None, policy=None, episodenum=
     episodenum_perworker = episodenum_perworker + [int(episodenum - np.sum(episodenum_perworker))]
     # Spawn worker processes
     for worker_id in range(num_workers):
-        p = mp.Process(target=worker, args=(Q, policy, episodenum, episodenum_perworker[worker_id], worker_id, envinit_params, t_maxstep, drqn, actioninput, fstack, action_size, distributional, device, policy_info, total_rewards,seed))
+        p = mp.Process(target=worker, args=(Q, policy, episodenum, episodenum_perworker[worker_id], rms, worker_id, envinit_params, t_maxstep, drqn, actioninput, fstack, action_size, distributional, device, policy_info, total_rewards,seed))
         p.start()
         processes.append(p)
     
@@ -72,7 +72,7 @@ def calc_performance(env, device, seed, config, Q=None, policy=None, episodenum=
 
 
 
-def worker(Q, policy, episodenum, workerepisodenum, worker_id, envinit_params, t_maxstep, drqn, actioninput, fstack, action_size, distributional, device, policy_info, total_rewards,seed):
+def worker(Q, policy, episodenum, workerepisodenum, rms, worker_id, envinit_params, t_maxstep, drqn, actioninput, fstack, action_size, distributional, device, policy_info, total_rewards,seed):
     # set seed
     worker_seed = seed + (worker_id + 1)
     random.seed(worker_seed)
@@ -114,7 +114,7 @@ def worker(Q, policy, episodenum, workerepisodenum, worker_id, envinit_params, t
             if Q is not None:
                 prev_a = previous_action if actioninput else None
                 if drqn == True: #DRQN
-                    action, hx = choose_action(state,Q,0,action_size,distributional,device, drqn, hx, prev_a)
+                    action, hx = choose_action(state,Q,0,action_size,distributional,device, rms, drqn, hx, prev_a)
                     if env.envID == 'tiger':
                         if action == 1:
                             managed = 1
@@ -123,7 +123,7 @@ def worker(Q, policy, episodenum, workerepisodenum, worker_id, envinit_params, t
                     elif env.envID in ['Env2.0','Env2.1','Env2.2','Env2.3','Env2.4','Env2.5','Env2.6','Hatchery3.0','Hatchery3.1','Hatchery3.2']:
                         actiondist[action] += 1
                 else: # DQN
-                    action = choose_action(stack,Q,0,action_size,distributional,device, drqn, hx, prev_a)
+                    action = choose_action(stack,Q,0,action_size,distributional,device, rms, drqn, hx, prev_a)
                 # * state increase in size by 1 due to adding previous action in choose_action, but it will get overwritten in the next iteration
                 previous_action = action
             elif policy is not None:

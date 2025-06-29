@@ -188,7 +188,7 @@ def Rainbow2(env,paramdf, meta):
             initQ = torch.load(file,weights_only=False)
         print('initializing Q with the best Q network from the previous run')
         Q.load_state_dict(initQ.state_dict())
-        initperform = calc_performance(env,device,seed,paramdf['envconfig'],Q,None,performance_sampleN,max_steps,False,actioninput) # initial Q's performance
+        initperform = calc_performance(env,device,seed,paramdf['envconfig'],rms,Q,None,performance_sampleN,max_steps,False,actioninput) # initial Q's performance
         print(f'performance of the initial Q network: {initperform}')
     else:
         initperform = -100000000
@@ -418,11 +418,16 @@ def Rainbow2(env,paramdf, meta):
         if i % evaluation_interval == 0: # calculate average reward every evaluation interval episodes
             if not external_testing:
                 t_evaltimestart = time.perf_counter()
-                avgperformance = calc_performance(env,device,seed,paramdf['envconfig'],Q,None,performance_sampleN,max_steps,False,actioninput)
+                avgperformance = calc_performance(env,device,seed,paramdf['envconfig'],rms,Q,None,performance_sampleN,max_steps,False,actioninput)
                 avgperformances.append(avgperformance)
                 t_evaltimeend = time.perf_counter()
                 t_evaltime += t_evaltimeend - t_evaltimestart
             torch.save(Q, f"{testwd}/QNetwork_{env.envID}_par{env.parset}_dis{env.discset}_DQN_episode{i}.pt")
+            # save the running mean and sd/var as well for this episode in pickle
+            if standardize:
+                with open(f"{testwd}/rms_{env.envID}_par{env.parset}_dis{env.discset}_DQN_episode{i}.pkl", "wb") as file:
+                    pickle.dump(rms, file)
+
 
         if i % evaluation_interval == 0: # print outs
             current_lr = Q.optimizer.param_groups[0]['lr']
@@ -460,17 +465,25 @@ def Rainbow2(env,paramdf, meta):
     print('calculating the average reward with the final Q network')
     if external_testing == False:
         t_evaltimestart = time.perf_counter()
-        final_avgreward = calc_performance(env,device,seed,paramdf['envconfig'],Q,None,final_performance_sampleN,max_steps,False,actioninput)
+        final_avgreward = calc_performance(env,device,seed,paramdf['envconfig'],rms,Q,None,final_performance_sampleN,max_steps,False,actioninput)
         avgperformances.append(final_avgreward)
         t_evaltimeend = time.perf_counter()
         t_evaltime += t_evaltimeend - t_evaltimestart
         print(f'final average reward: {final_avgreward}')
     torch.save(Q, f"{testwd}/QNetwork_{env.envID}_par{env.parset}_dis{env.discset}_DQN_episode{i}.pt")
+    if standardize:
+        with open(f"{testwd}/rms_{env.envID}_par{env.parset}_dis{env.discset}_DQN_episode{i}.pkl", "wb") as file:
+            pickle.dump(rms, file)
+
     
     # save results and performance metrics.
     ## save last model and the best model (in terms of rewards)
     # last model
     torch.save(Q, f"{testwd}/QNetwork_{env.envID}_par{env.parset}_dis{env.discset}_DQN.pt")
+    if standardize:
+        with open(f"{testwd}/rms_{env.envID}_par{env.parset}_dis{env.discset}_DQN.pkl", "wb") as file:
+            pickle.dump(rms, file)
+
     # best model
     if not external_testing:
         if max(avgperformances) > initperform:
@@ -508,8 +521,6 @@ def Rainbow2(env,paramdf, meta):
     # print time
     print(f'time for initialization: {t_inittime}\n time for simulation: {t_simulationtime}\n time for training: {t_traintime}\n time for evaluation: {t_evaltime}')
     return Q_discrete, policy, MSE, avgperformances, final_avgreward
-
-
 
 def _make_discrete_Q(Q,env,device):
     # make a discrete Q table
