@@ -20,6 +20,7 @@ from choose_action import *
 from absorbing import *
 from pretrain import *
 from stacking import *
+from RunningMeanStd import RunningMeanStd
 
 def Rainbow2(env,paramdf, meta):
     '''
@@ -107,6 +108,7 @@ def Rainbow2(env,paramdf, meta):
     else:
         min_lr = float(paramdf['minlr'])
     normalize = bool(int(paramdf['normalize']))
+    standardize = bool(int(paramdf['standardize']))
     fstack = int(paramdf['framestacking'])# framestacking
 
     gamma = env.gamma # discount rate
@@ -131,8 +133,10 @@ def Rainbow2(env,paramdf, meta):
     actioninputsize = int(actioninput)*len(env.actionspace_dim)
 
  
+    ## running mean normalization set up
+    rms = RunningMeanStd(len(env.observation_space)) if standardize else None
 
-    ## normalization parameters
+    ## minmax normalization parameters
     if env.contstate == False:
         if env.partial == True:
             state_max = (torch.tensor(env.obsspace_dim, dtype=torch.float32) - 1).to(device)
@@ -278,6 +282,7 @@ def Rainbow2(env,paramdf, meta):
                 a = np.random.choice(np.flatnonzero(mask)) # first action in the episode is random for added exploration
             true_state = env.state
             reward, done, _ = env.step(a) # take a step
+            
             if env.episodic == False and env.absorbing_cut == True: # if continuous task and absorbing state is defined
                 if absorbing(env,true_state) == True: # terminate shortly after the absorbing state is reached.
                     termination_t += 1

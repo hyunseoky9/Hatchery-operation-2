@@ -135,7 +135,10 @@ class Hatchery3_2:
         combo = np.array(list(itertools.product(delmid_values, delmid_values)))
         self.combo_delfallprob = np.array(list(itertools.product(delfallprob_i, delfallprob_s)))
         self.combo_delfallprob = np.prod(self.combo_delfallprob, axis=1) # product of delfall probabilities
+        valididx = np.where(self.combo_delfallprob > 1e-2)[0] # only keep the combinations with probability greater than 1e-3
+        self.combo_delfallprob = self.combo_delfallprob[valididx] # only keep the valid combinations
         delfall = np.column_stack((np.zeros(combo.shape[0]),combo))
+        delfall = delfall[valididx,:] # only keep the valid combinations
         self.sj = np.exp(-124*M0 - 150*Mw)*((1 - delfall) + self.tau*delfall*deldiffavg + (1 - self.tau)*self.r0*np.mean(self.phidiff))
         self.sa = np.exp(-124*M1 - 150*Mw)*((1 - delfall) + self.tau*delfall + (1 - self.tau)*self.r1*np.mean(self.phifall))
         self.sj =  np.prod(self.sj,axis=1)**(1/self.sj.shape[1]) # geometric mean of sj
@@ -916,15 +919,13 @@ class Hatchery3_2:
                     fa = (np.sum(numeratorfa/denom,axis=1))/totN1
                     bvals = np.matmul(self.sj[:,None], ((f1*totN0+fa*totN1)/(totN0+totN1))[None,:])
                     b = bvals[:,0] # actual b value with mean alpha value
-                    recruitvar = np.sum((bvals[:,1:] - b[:,None])**2 * np.tile(self.alphaprob[None,:], (25,1)),axis=1) # sigma^2 in Myhre et al. 2016, variance in the number of recruits produced by a single spawner (basically variance of B where mean is b)
+                    recruitvar = np.sum((bvals[:,1:] - b[:,None])**2 * np.tile(self.alphaprob[None,:], (len(self.sj),1)),axis=1) # sigma^2 in Myhre et al. 2016, variance in the number of recruits produced by a single spawner (basically variance of B where mean is b)
                     grate = self.sa + b/2 # definition of lambda in Myhre et al. 2016
                     var_dg = self.sa*(1-self.sa) + b/4 + recruitvar/4  # sigma^2_dg in Myhre et al. 2016
                     # calculate the expected generation time in pg 2433 of # Myhre et al. 2016
                     #genT +=  np.sum(grate/(grate - self.sa) * self.lkappa_prob[lkappaaidx, lkappaiidx] * self.combo_delfallprob) # generation time given the population size
                     # calculate the factor in eq 4 of myhre et al. 2016
                     factor += np.sum(var_dg/(grate**2) * self.lkappa_prob[lkappaaidx, lkappaiidx] * self.combo_delfallprob)
-        if 1/factor > 1.5:
-            fo = 0
         New = (totN0+totN1)/factor
         New = New / genT # generation time adjusted wild Ne.
 
@@ -935,7 +936,7 @@ class Hatchery3_2:
         else:
             effspawner = N0 + self.beta_2*N1 # effective number of spawners
             stocked_cont = np.sum((self.alpha*p)/(1 + self.alpha*effspawner/kappa)) # stocked fish contribution
-            total_cont =  np.sum((self.alpha*(effspawner - p))/(1 + self.alpha*effspawner/kappa)) # wild fish contribution
+            total_cont =  np.sum((self.alpha*(effspawner))/(1 + self.alpha*effspawner/kappa)) # wild fish contribution
             x = stocked_cont/total_cont
             mu_k = self.fc[1]*self.irphi*np.exp(-150*np.prod(np.exp(self.lMwmu))**(1/3))
             #Neh = np.maximum(mu_k*(2*Nb - 1)/4, 0) # variance effective population size of hatchery population
@@ -944,4 +945,7 @@ class Hatchery3_2:
             if Neh == 0 or New == 0 or (x**2/Neh + (1-x)**2/(New))==0:
                 foo = 0
             Ne = 1/(x**2/Neh + (1-x)**2/(New))
+        if Ne < 80:
+            fo = 0
+
         return Ne, Neh, New
