@@ -134,8 +134,8 @@ def Rainbow2(env,paramdf, meta):
 
  
     ## running mean normalization set up
-    rms = RunningMeanStd(len(env.observation_space), max_steps) if standardize else None
-
+    rms = RunningMeanStd(len(env.obsspace_dim), max_steps) if standardize else None
+    
     ## minmax normalization parameters
     if env.contstate == False:
         if env.partial == True:
@@ -263,9 +263,9 @@ def Rainbow2(env,paramdf, meta):
         # initialize state that doesn't start from terminal
         env.reset() # random initialization
         if env.partial == False:
-            S = env.state
+            S = rms.normalize(env.state) if standardize else env.state
         else:
-            S = env.obs
+            S = rms.normalize(env.obs) if standardize else env.obs 
         stack = S*fstack # set stack
         previous_a = 0
         done = False

@@ -7,14 +7,15 @@ def pretrain(env, nq, memory, max_steps, batch_size, PrioritizedReplay, max_prio
     reset = True
     memadd = 0 # number of transitions added to memory
     n = nq.n
+    stepcounter = 0
     while memadd < batch_size:
         if reset == True:
             if env.partial == False:
                 env.reset()
-                state = env.state
+                state = rms.normalize(env.state) if standardize else env.state
             else:
                 env.reset()
-                state = env.obs
+                state = rms.normalize(env.obs) if standardize else env.obs
             previous_action = 0
             reset = False
             stack = state*fstack
@@ -33,12 +34,13 @@ def pretrain(env, nq, memory, max_steps, batch_size, PrioritizedReplay, max_prio
         if t >= max_steps:
             done = True
         t += 1
+        stepcounter += 1
         if env.partial == False:
             if standardize:
                 rms.stored_batch.append(env.obs)
                 normstate = rms.normalize(env.obs)
                 rms.rolloutnum += 1
-                if rms.rolloutnum >= rms.updateN:
+                if rms.rolloutnum >= 10:
                     rms.update()
             else:
                 normstate = env.obs
@@ -48,27 +50,29 @@ def pretrain(env, nq, memory, max_steps, batch_size, PrioritizedReplay, max_prio
                 rms.stored_batch.append(env.obs)
                 normstate = rms.normalize(env.obs)
                 rms.rolloutnum += 1
-                if rms.rolloutnum >= rms.updateN:
-                    rms.update()
+                if rms.rolloutnum >= 10:
+                    rms.update()  # update the running mean and variance after collecting enough samples
             else:
                 normstate = env.obs
             next_state = normstate
             
         next_stack = stacking(env,stack,next_state)
+
         if done:
-            nq.add(stack, action, reward, next_stack, done, previous_action, memory, PrioritizedReplay)
             reset = True
-            memadd += n
+            if stepcounter >= 12:
+                nq.add(stack, action, reward, next_stack, done, previous_action, memory, PrioritizedReplay)
+                memadd += n
         else:
             if env.episodic == False and memadd == (batch_size - 1): # if continuous task AND this is the last transition to be added on the memory AND it's not done, make it done for marking episode ends properly.
                 done = True
-            # increase memadd by 1 if nq is full
-            if len(nq.queue) == n-1:
-                memadd += 1
-            nq.add(stack, action, reward, next_stack, done, previous_action, memory, PrioritizedReplay)
+            if stepcounter >= 12:
+                # increase memadd by 1 if nq is full
+                if len(nq.queue) == n-1:
+                    memadd += 1
+                nq.add(stack, action, reward, next_stack, done, previous_action, memory, PrioritizedReplay)
             state = next_state
             stack = next_stack
             previous_action = action
-
     nq.queue = [] # clear the n-step queue
     nq.rqueue = [] 

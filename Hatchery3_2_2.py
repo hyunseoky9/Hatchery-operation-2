@@ -10,13 +10,13 @@ import os
 from AR1 import AR1
 
 
-class Hatchery3_2:
+class Hatchery3_2_2:
     """
-    environment for the hatchery problem implementation-grade parameterization.
-    Unlike Hatchery 3.1, uses effective population size as a genetic diversity variable.
+    same as Hatchery3.2 but there are no seasonalities anymore and there's only fall stocking decision to make.
+    Fall decisions are done in one step where the actionspace is a vector of 4 (proportion of fish to stock in each reach + discarding rest)
     """
     def __init__(self,initstate,parameterization_set,discretization_set,LC_prediction_method):
-        self.envID = 'Hatchery3.2'
+        self.envID = 'Hatchery3.2.2'
         self.partial = True
         self.episodic = True
         self.absorbing_cut = True # has an absorbing state and the episode should be cut shortly after reaching it.
@@ -153,26 +153,17 @@ class Hatchery3_2:
         # range for each variables
         self.N0minmax = [0,1e7] 
         self.N1minmax = [0,1e7] # N1 and N1 minmax are the total population minmax.
-        self.Nhminmax = [0, 300000]
-        self.Nbminmax = [0,500]
-        self.pminmax = [0, 50000] # Total number of fish stocked in a season that make it to breeding season
         self.qminmax = [self.flowmodel.flowmin[0], self.flowmodel.flowmax[0]] # springflow in Otowi (Otowi gauge)
         self.Neminmax = [0, 1e7]
-        self.tminmax = [0,3]
-        self.qhatminmax = [self.flowmodel.flowmin[0] + self.flowmodel.bias_95interval[0], self.flowmodel.flowmax[0] + self.flowmodel.bias_95interval[1]] # springflow estimate in otowi
         self.aminmax = [0, 300000]
         # dimension for each variables
         self.N0_dim = (self.n_reach)
         self.N1_dim = (self.n_reach)
-        self.Nh_dim = (1)
-        self.Nb_dim = (1)
-        self.p_dim = (self.n_reach)
         self.q_dim = (1)
         self.Ne_dim = (1)
-        self.t_dim = (1)
-        self.qhat_dim = (1)
-        self.statevar_dim = (self.N0_dim, self.N1_dim, self.Nh_dim, self.Nb_dim, self.p_dim, self.q_dim, self.Ne_dim, self.t_dim)
-        self.obsvar_dim = (self.N0_dim, self.N1_dim, self.Nh_dim, self.Nb_dim, self.p_dim, self.qhat_dim, self.Ne_dim, self.t_dim)
+        self.statevar_dim = (self.N0_dim, self.N1_dim, self.q_dim, self.Ne_dim)
+        self.obsvar_dim = (self.N0_dim, self.N1_dim, self.q_dim, self.Ne_dim)
+        self.action_dim = (1,1,1,1) # 4 actions: stocking proportion in angostura, isleta, and san acacia, and discard rest.
 
         # starting 3.0, discretization for discrete variables and ranges for continuous variables will be defined in a separate function, state_discretization.
         discretization_obj = self.state_discretization(discretization_set)
@@ -223,7 +214,11 @@ class Hatchery3_2:
                 self.oidx[key] = np.arange(0,self.obsvar_dim[idx])
             else:
                 self.oidx[key] = np.arange(np.sum(self.obsvar_dim[0:idx]),np.sum(self.obsvar_dim[0:idx]) + self.obsvar_dim[idx])
-        self.aidx = {key: idx for idx, key in enumerate(self.actions.keys())}
+        for idx, key in enumerate(self.actions.keys()):
+            if idx ==0:
+                self.aidx[key] = np.arange(0,self.action_dim[idx])
+            else:
+                self.aidx[key] = np.arange(np.sum(self.action_dim[0:idx]),np.sum(self.action_dim[0:idx]) + self.action_dim[idx])
 
         # Initialize state and observation
         self.state, self.obs = self.reset(initstate)
@@ -231,146 +226,39 @@ class Hatchery3_2:
     def reset(self, initstate=None):
         if type(initstate) is not np.ndarray:
             initstate = np.ones(len(self.statevar_dim))*-1
-            initstate[-1] = 0 # start from spring if initstate is not provided
         
         # Initialize state variables
         new_state = []
         new_obs = []
-        if initstate[-1] == -1:
-            season  = np.random.choice([0,1]).astype(int) # only start from spring or fall angostura stocking.
-        else:
-            season = initstate[-1].astype(int)
 
-        if season == 0: # spring
-            # N0 & ON0
-            N0val, N1val = self.init_pop_sampler()
-            if initstate[0] == -1:
-                # N0val = random.choices(list(np.arange(1, len(self.states['N0']))), k = self.statevar_dim[0])
-                new_state.append(N0val) # don't start from the smallest population size
-                new_obs.append(N0val)
+        # N0 & ON0
+        N0val, N1val = self.init_pop_sampler()
+        if initstate[0] == -1:
+            # N0val = random.choices(list(np.arange(1, len(self.states['N0']))), k = self.statevar_dim[0])
+            new_state.append(N0val) # don't start from the smallest population size
+            new_obs.append(N0val)
+        else:
+            new_state.append(initstate[0])
+            new_obs.append(initstate[0])
+        # N1 & ON1
+        if initstate[1] == -1:
+            # N1val = random.choices(list(np.arange(1, len(self.states['N1']))), k = self.statevar_dim[1])
+            new_state.append(N1val) # don't start from
+            new_obs.append(N1val)
+        else:
+            new_state.append(initstate[1])
+            new_obs.append(initstate[1])
+        # q & qhat
+        if initstate[5] == -1:
+            if self.discset == -1:
+                qval = np.random.uniform(size=1)*(self.states['logq'][1] - self.states['logq'][0]) + self.states['logq'][0]
             else:
-                new_state.append(initstate[0])
-                new_obs.append(initstate[0])
-            # N1 & ON1
-            if initstate[1] == -1:
-                # N1val = random.choices(list(np.arange(1, len(self.states['N1']))), k = self.statevar_dim[1])
-                new_state.append(N1val) # don't start from
-                new_obs.append(N1val)
-            else:
-                new_state.append(initstate[1])
-                new_obs.append(initstate[1])
-            # Nh & ONh
-            if initstate[2] == -1:
-                Nhval = [0] # no fish in the hatchery in the beginning
-                new_state.append(Nhval)
-                new_obs.append(Nhval)
-            else:
-                new_state.append(initstate[2])
-                new_obs.append(initstate[2])
-            # Nb
-            if initstate[3] == -1:
-                Nbval = 0 # no production in the beginning
-                if self.discset == -1:
-                    Nbval = [np.log(Nbval + 1)]
-                else:
-                    Nbval = [self._discretize_idx(Nbval, self.states['Nb'])]
-                new_state.append(Nbval)
-                new_obs.append(Nbval)
-            else:
-                new_state.append(initstate[3])
-                new_obs.append(initstate[3])
-            # p
-            if initstate[4] == -1:
-                pval = np.ones(self.n_reach)*np.log(0 + 1) # nothing's been stocked in the beginning
-                new_state.append(pval)
-                new_obs.append(pval)
-            else:
-                new_state.append(initstate[4])
-                new_obs.append(initstate[4])
-            # q & qhat
-            if initstate[5] == -1:
-                if self.discset == -1:
-                    qval = np.random.uniform(size=1)*(self.states['logq'][1] - self.states['logq'][0]) + self.states['logq'][0]
-                    bias = np.clip(np.random.normal(loc=self.flowmodel.bias_mean, scale=self.flowmodel.bias_std, size=1),self.flowmodel.bias_95interval[0],self.flowmodel.bias_95interval[1])
-                    qhatval = np.log(np.exp(qval) + bias)
-                else:
-                    qval = random.choices(list(np.arange(0,len(self.states['q']))), k = self.statevar_dim[3])
-                    springflow = self.states['q'][qval[0]]
-                    bias = np.clip(np.random.normal(loc=self.flowmodel.bias_mean, scale=self.flowmodel.bias_std, size=1),self.flowmodel.bias_95interval[0],self.flowmodel.bias_95interval[1])
-                    qhatval = springflow + bias
-                    qhatval = [self._discretize_idx(qhatval[0], self.observations['qhat'])]
-                new_state.append(qval)
-                new_obs.append(qhatval)
-            else:
-                new_state.append(initstate[5])
-                new_obs.append(initstate[5])
-        else: # fall
-            # N0 & ON0
-            N0val, N1val = self.init_pop_sampler()
-            if initstate[0] == -1:
-                #N0val = random.choices(list(np.arange(1, len(self.states['N0']))), k = self.statevar_dim[0])
-                new_state.append(N0val) # don't start from the smallest population size
-                new_obs.append(N0val)
-            else:
-                new_state.append(initstate[0])
-                new_obs.append(initstate[0])
-            # N1 & ON1
-            if initstate[1] == -1:
-                #N1val = random.choices(list(np.arange(1, len(self.states['N1']))), k = self.statevar_dim[1])
-                new_state.append(N1val) # don't start from
-                new_obs.append(N1val)
-            else:
-                new_state.append(initstate[1])
-                new_obs.append(initstate[1])
-            # Nh & ONh
-            if initstate[2] == -1:
-                if self.discset == - 1:
-                    Nhval = np.log(np.random.uniform(size=1)*(self.Nhminmax[1] - self.Nhminmax[0]) + self.Nhminmax[0] + 1)
-                else:
-                    Nhval = random.choices(list(np.arange(0, len(self.states['Nh']))), k = self.statevar_dim[2])
-                new_state.append(Nhval)
-                new_obs.append(Nhval)
-            else:
-                new_state.append(initstate[2])
-                new_obs.append(initstate[2])
-            # Nb
-            if initstate[3] == -1:
-                Nbval = 0 # no production in the beginning
-                if self.discset == -1:
-                    Nbval = [np.log(Nbval + 1)]
-                else:
-                    Nbval = [self._discretize_idx(Nbval, self.states['Nb'])]
-                new_state.append(Nbval)
-                new_obs.append(Nbval)
-            else:
-                new_state.append(initstate[3])
-                new_obs.append(initstate[3])
-            # p
-            if initstate[4] == -1:
-                pval = np.ones(self.n_reach)*np.log(0 + 1) # nothing's been stocked in the beginning
-                new_state.append(pval)
-                new_obs.append(pval)
-            else:
-                new_state.append(initstate[4])
-                new_obs.append(initstate[4])
-            # q & qhat
-            if initstate[5] == -1:
-                # springflow not applicable in the fall season, but just pick a random springflow
-                if self.discset == -1:
-                    qval = np.random.uniform(size=1)*(self.states['logq'][1] - self.states['logq'][0]) + self.states['logq'][0]
-                    bias = np.clip(np.random.normal(loc=self.flowmodel.bias_mean, scale=self.flowmodel.bias_std, size=1),self.flowmodel.bias_95interval[0],self.flowmodel.bias_95interval[1])
-                    qhatval = np.log(np.exp(qval) + bias)
-                else:
-                    qval = random.choices(list(np.arange(0,len(self.states['q']))), k = self.statevar_dim[3])
-                    springflow = self.states['q'][qval[0]]
-                    bias = np.clip(np.random.normal(loc=self.flowmodel.bias_mean, scale=self.flowmodel.bias_std, size=1),self.flowmodel.bias_95interval[0],self.flowmodel.bias_95interval[1])
-                    qhatval = springflow + bias
-                    qhatval = [self._discretize_idx(qhatval[0], self.observations['qhat'])]
-                new_state.append(qval)
-                new_obs.append(qhatval)
-            else:
-                new_state.append(initstate[5])
-                new_obs.append(initstate[5])
+                qval = random.choices(list(np.arange(0,len(self.states['q']))), k = self.statevar_dim[3])
+            new_state.append(qval)
+            new_obs.append(qval)
+        else:
+            new_state.append(initstate[2])
+            new_obs.append(initstate[2])
         # Ne & ONe
         if self.discset == -1:
             Neval = np.array([np.sum(np.exp(N0val)-1 + np.exp(N1val)-1)*0.6])
@@ -381,45 +269,27 @@ class Hatchery3_2:
             Neval = self._discretize_idx(Neval, self.states['Ne'])
         new_state.append(np.log(Neval+1))
         new_obs.append(np.log(Neval+1))
-        # t & Ot
-        new_state.append([season])
-        new_obs.append([season])
 
         self.state = list(np.concatenate(new_state))
         self.obs = list(np.concatenate(new_obs))
         return self.state, self.obs
 
-    def step(self, aidx):
+    def step(self, a):
         extra_info = {}
         if self.discset == -1:
             N0 = np.exp(np.array(self.state)[self.sidx['logN0']]) - 1
             N1 = np.exp(np.array(self.state)[self.sidx['logN1']]) - 1
-            Nh = np.exp(np.array(self.state)[self.sidx['logNh']]) - 1
-            Nb = np.exp(np.array(self.state)[self.sidx['logNb']]) - 1
-            p = np.exp(np.array(self.state)[self.sidx['logp']]) - 1
             q = np.exp(np.array(self.state)[self.sidx["logq"]]) - 1
             Ne = np.exp(np.array(self.state)[self.sidx["logNe"]]) - 1
-            t = np.array(self.state)[self.sidx['t']].astype(int)
-            qhat = np.exp(np.array(self.obs)[self.oidx['logqhat']]) - 1
         else:
             N0 = np.array(self.states["N0"])[np.array(self.state)[self.sidx['N0']]]
             N1 = np.array(self.states["N1"])[np.array(self.state)[self.sidx['N1']]]
-            Nh = np.array(self.states["Nh"])[np.array(self.state)[self.sidx['Nh']]]
-            Nb = np.array(self.states["Nb"])[np.array(self.state)[self.sidx['Nb']]]
-            p = np.array(self.states['p'])[np.array(self.state)[self.sidx['p']]]
             q = np.array(self.states["q"])[np.array(self.state)[self.sidx['q']]]
             Ne = np.array(self.states['Ne'])[np.array(self.state)[self.sidx['Ne']]]
-            t = np.array(self.states['t'])[np.array(self.state)[self.sidx['t']]]
-            qhat = np.array(self.observations['qhat'])[np.array(self.obs)[self.oidx['qhat']]]
-        a = self.actions["a"][aidx]
-        t_next = t + 1 if t < 3 else np.zeros(1).astype(int)
         totN0 = np.sum(N0)
         totN1 = np.sum(N1)
         totpop = totN0 + totN1
-        if t == 1 and totpop/4000 < 0.5:
-            foo = 0
         if totpop >= self.Nth:
-            if t == 0: # sring
                 # demographic stuff (reproductin and summer survival)
                 delfall = np.concatenate(([self.delfall[0][0]],np.random.beta(self.delfall[0][1:],self.delfall[1][1:])))
                 deldiff = np.concatenate(([self.deldiff[0][0]],np.random.beta(self.deldiff[0][1:],self.deldiff[1][1:])))
@@ -474,6 +344,9 @@ class Hatchery3_2:
                     qhat_next_idx = np.array(self.obs)[self.oidx['qhat']] # no change
                     self.state = list(np.concatenate([N0_next_idx, N1_next_idx, Nh_next_idx, Nb_next_idx, p_next_idx, q_next_idx, Ne_next_idx, t_next_idx]).astype(int))
                     self.obs = list(np.concatenate([N0_next_idx, N1_next_idx, Nh_next_idx, Nb_next_idx, p_next_idx, qhat_next_idx, ONe_next_idx, t_next_idx]).astype(int))
+
+
+                    
             elif t < 3: # fall stocking for angostura or isleta
                 # demographic stuff
                 if a - Nh <= 1e-7: # valid action choice. stocking is less than the hatchery population size.
@@ -582,51 +455,37 @@ class Hatchery3_2:
             states = {
                 "N0": list(np.linspace(self.N0minmax[0], self.N0minmax[1], 31)), # population size dim:(3)
                 "N1": list(np.linspace(self.N1minmax[0], self.N1minmax[1], 31)), # population size (3)
-                "Nh": list(np.linspace(self.Nhminmax[0], self.Nhminmax[1], 11)), # hatchery population size (1)
-                "Nb": list(np.linspace(self.Nbminmax[0], self.Nbminmax[1], 11)), # hatchery population size (1)
-                "p": list(np.linspace(self.pminmax[0], self.pminmax[1], 11)), # hatchery population size (3)
                 "q": list(np.linspace(self.qminmax[0], self.qminmax[1], 11)), # spring flow in Otowi (1)
                 "Ne": list(np.linspace(self.Neminmax[0], self.Neminmax[1], 11)), # heterozygosity (1)
-                "t": list(np.arange(self.tminmax[0], self.tminmax[1] + 1, 1)), # time (1)
             }
 
             observations = {
                 "ON0": states['N0'],
                 "ON1": states['N1'], 
-                "ONh": states['Nh'],
-                "ONb": states['Nb'],
-                "Op": states['p'],
-                "qhat": list(np.linspace(self.qhatminmax[0], self.qhatminmax[1] + 1, 11)), # forecasted flow in Otowi dim:(1)
+                "Oq": states['q'],
                 "ONe": states['Ne'],
-                "Ot": states['t'], 
-            }
-            actions = {
-                "a": list(np.linspace(self.aminmax[0], self.aminmax[1], 11)), # stocking/production size (1)
             }
         elif discretization_set == -1: # continuous
             states = {
                 "logN0": list(np.log(np.array(self.N0minmax)+1)), # log population size dim:(3)
                 "logN1": list(np.log(np.array(self.N1minmax)+1)), # log population size (3)
-                "logNh": list(np.log(np.array(self.Nhminmax)+1)), # log hatchery population size (1)
-                "logNb": list(np.log(np.array(self.Nbminmax)+1)), # log number of broodstock used for production
-                "logp": list(np.log(np.array(self.pminmax)+1)), # Total number of fish stocked in a season that make it to breeding season (3)
                 "logq": list(np.log(np.array(self.qminmax)+1)), # log spring flow in Otowi (Otowi) (1)
-                "logNe": self.Neminmax, # heterozygosity (1)
-                "t": self.tminmax # time (1)
+                "logNe": list(np.log(np.array(self.Neminmax)+1)),
             }
             observations = {
                 "OlogN0": states['logN0'],
                 "OlogN1": states['logN1'],
-                "OlogNh": states['logNh'],
-                "OlogNb": states['logNb'],
-                "Ologp": states['logp'],
-                "logqhat": list(np.log(np.array(self.qhatminmax)+1)), # forecasted flow in Otowi dim:(1)
+                "Ologq": states['logq'],
                 "OlogNe": states['logNe'],
-                "Ot": states['t'],
             }
-            actions = {
-                "a": list(np.linspace(self.aminmax[0], self.aminmax[1], 31)), # stocking/production size (1)
-            }
+        # action space is 4 dimensional and each dimension is continuous between 0 and 1.
+        actions = {
+            "a_a": [0,1], # proportion of fish stocked in Angostura (1)
+            "a_i": [0,1], # proportion of fish stocked in Isleta (1)
+            "a_s": [0,1], # proportion of fish stocked in San Acacia (1)
+            "a_d": [0,1], # proportion of fish discarded (1)
+        }
+
         return {'states': states,'observations': observations,'actions': actions}
 
     def init_pop_sampler(self):

@@ -96,25 +96,25 @@ def worker(Q, policy, episodenum, workerepisodenum, rms, worker_id, envinit_para
         hx = None # for A3C + lstm and RDQN
 
         if env.partial == False:
-            stack = env.state*fstack
+            stack = rms.normalize(env.state)*fstack if rms is not None else env.state*fstack
         else:
-            stack = env.obs*fstack
-        
+            stack = rms.normalize(env.obs)*fstack if rms is not None else env.obs*fstack
+
         previous_action = 0
         done = False
         t = 0
         while done == False:
             if env.partial == False:
-                state = env.state
-                stack = stack[len(env.state):] + env.state
+                state = rms.normalize(env.state) if rms is not None else env.state
+                stack = stack[len(env.state):] + state
             else:
-                state = env.obs
-                stack = stack[len(env.obs):] + env.obs
+                state = rms.normalize(env.obs) if rms is not None else env.obs
+                stack = stack[len(env.obs):] + state
 
             if Q is not None:
                 prev_a = previous_action if actioninput else None
                 if drqn == True: #DRQN
-                    action, hx = choose_action(state,Q,0,action_size,distributional,device, rms, drqn, hx, prev_a)
+                    action, hx = choose_action(state,Q,0,action_size,distributional,device, drqn, hx, prev_a)
                     if env.envID == 'tiger':
                         if action == 1:
                             managed = 1
@@ -123,7 +123,7 @@ def worker(Q, policy, episodenum, workerepisodenum, rms, worker_id, envinit_para
                     elif env.envID in ['Env2.0','Env2.1','Env2.2','Env2.3','Env2.4','Env2.5','Env2.6','Hatchery3.0','Hatchery3.1','Hatchery3.2']:
                         actiondist[action] += 1
                 else: # DQN
-                    action = choose_action(stack,Q,0,action_size,distributional,device, rms, drqn, hx, prev_a)
+                    action = choose_action(stack,Q,0,action_size,distributional,device, drqn, hx, prev_a)
                 # * state increase in size by 1 due to adding previous action in choose_action, but it will get overwritten in the next iteration
                 previous_action = action
             elif policy is not None:

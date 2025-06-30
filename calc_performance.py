@@ -29,26 +29,26 @@ def calc_performance(env, device, seed, configdict, rms, Q=None, policy=None, ep
         hx = None # for A3C + lstm and RDQN
 
         if env.partial == False:
-            stack = env.env*fstack
+            stack = rms.normalize(env.state)*fstack if rms is not None else env.env*fstack
         else:
-            stack = env.obs*fstack
-        
+            stack = rms.normalize(env.obs)*fstack if rms is not None else env.obs*fstack
+
         previous_action = 0
         done = False
         t = 0
         while done == False:
             if env.partial == False:
-                state = env.state
-                stack = stack[len(env.state):] + env.state
+                state = rms.normalize(env.state) if rms is not None else env.state
+                stack = stack[len(env.state):] + state
             else:
-                state = env.obs
-                stack = stack[len(env.obs):] + env.obs
+                state = rms.normalize(env.obs) if rms is not None else env.obs
+                stack = stack[len(env.obs):] + state
 
             if Q is not None:
                 prev_a = previous_action if actioninput else None
                 if drqn == True: #DRQN
                     mask = env._compute_mask()
-                    action, hx = choose_action(state,Q,0,action_size,distributional,device, rms, drqn, hx, prev_a, mask)
+                    action, hx = choose_action(state,Q,0,action_size,distributional,device, drqn, hx, prev_a, mask)
                     if env.envID == 'tiger':
                         if action == 1:
                             managed = 1
@@ -58,7 +58,7 @@ def calc_performance(env, device, seed, configdict, rms, Q=None, policy=None, ep
                         actiondist[action] += 1
                 else: # DQN
                     mask = env._compute_mask()
-                    action = choose_action(stack,Q,0,action_size,distributional,device, rms, drqn, hx, prev_a, mask)
+                    action = choose_action(stack,Q,0,action_size,distributional,device, drqn, hx, prev_a, mask)
                     if env.envID in ['Env2.0','Env2.1','Env2.2','Env2.3','Env2.4','Env2.5','Env2.6','Hatchery3.0','Hatchery3.1','Hatchery3.2']:
                         actiondist[action] += 1
                 # * state increase in size by 1 due to adding previous action in choose_action, but it will get overwritten in the next iteration

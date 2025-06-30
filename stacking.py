@@ -10,5 +10,7 @@ def stacking(env, stack, next_state):
                     return stack[len(next_state):] + next_state
                 else:
                     return stack
+        else:
+            return stack[len(next_state):] + next_state
     except:
         return stack[len(next_state):] + next_state

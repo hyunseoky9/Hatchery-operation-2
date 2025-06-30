@@ -29,10 +29,10 @@ class RunningMeanStd:
             new_mean * self.m + self.mean * (1-self.m), \
             new_var  * self.m + self.var  * (1-self.m), \
             tot_count
-
+        #print(f'RunningMeanStd updated: mean={self.mean}, var={self.var}, count={self.count}')
         # empty the stored batch
         self.stored_batch = []
         self.rolloutnum = 0
 
     def normalize(self, x):
-        return (x - self.mean) / np.sqrt(self.var + 1e-8)
+        return list((x - self.mean) / np.sqrt(self.var + 1e-8))
