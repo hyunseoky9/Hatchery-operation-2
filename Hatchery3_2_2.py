@@ -252,7 +252,7 @@ class Hatchery3_2_2:
             new_state.append(initstate[1])
             new_obs.append(initstate[1])
         # q & qhat
-        if initstate[5] == -1:
+        if initstate[2] == -1:
             if self.discset == -1:
                 qval = np.random.uniform(size=1)*(self.states['logq'][1] - self.states['logq'][0]) + self.states['logq'][0]
             else:
@@ -291,6 +291,7 @@ class Hatchery3_2_2:
             Ne = np.array(self.states['Ne'])[np.array(self.state)[self.sidx['Ne']]]
         totN0 = np.sum(N0)
         totN1 = np.sum(N1)
+        a = a[0:self.n_reach] # only take the first n_reach elements of the action vector
         totpop = totN0 + totN1
         if totpop >= self.Nth:
             # demographic stuff (stocking and winter survival)
@@ -328,7 +329,7 @@ class Hatchery3_2_2:
             extra_info['Neh'] = Neh
             extra_info['New'] = New
             # reward & done
-            reward = self.extant - self.prodcost if a > 0 else self.extant
+            reward = self.extant
             done = False
 
             # update state & obs

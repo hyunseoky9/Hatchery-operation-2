@@ -1,7 +1,6 @@
 import torch
 from torch import nn
-from torchvision.transforms import ToTensor
-from torch.optim.lr_scheduler import ExponentialLR, StepLR
+from torch.optim.lr_scheduler import ExponentialLR
 import numpy as np
 class Actor(nn.Module):
     """Actor (Policy) Model."""
@@ -30,17 +29,29 @@ class Actor(nn.Module):
         layers.append(nn.Linear(self.hidden_size[-1], self.action_size))
 
         # Creating the Sequential module
-        self.linear_relu_stack = nn.Sequential(*layers)
+        self.body = nn.Sequential(*layers)
 
         # optimizer
         #self.optimizer = torch.optim.SGD(self.parameters(), lr=self.learning_rate)
         #self.optimizer = torch.optim.RMSprop(self.parameters(), lr=self.learning_rate)
         #self.optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate)
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate, eps=1e-8)
-        self.scheduler = ExponentialLR(self.optimizer, gamma=lrdecayrate)  # Exponential decay
         #self.scheduler = StepLR(self.optimizer, step_size=1, gamma=0.1)  # Halve LR every 10 steps
     
     def forward(self, x):
-        logits = self.linear_relu_stack(x)
+        logits = self.body(x)
         probs  = torch.softmax(logits, dim=-1)  # simplex projection
         return probs
+
+    def act(self, state, ou_process, device="cpu"):
+        with torch.no_grad():
+            # 1. tensor-ise state and add batch dim
+            s = torch.as_tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
+            logits = self.body(s).squeeze(0) # shape [K]
+            # 3. OU noise in logit space
+            noise  = torch.as_tensor(ou_process.sample(),
+                                    dtype=logits.dtype,
+                                    device=logits.device)
+            noisy_logits = logits + noise
+            # 4. project onto simplex
+            action = torch.softmax(noisy_logits, dim=-1) # stays on delta simplex
+        return action.cpu().numpy()

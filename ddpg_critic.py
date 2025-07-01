@@ -19,10 +19,12 @@ class Critic(nn.Module):
         super().__init__()
         self.state_size = state_size
         self.action_size = action_size
-        self.state_hidden_size = state_hidden_size if isinstance(state_hidden_size, list) else np.ones(state_hidden_num)*state_hidden_size
+        self.state_hidden_size = state_hidden_size if isinstance(state_hidden_size, list) else (np.ones(state_hidden_num)*state_hidden_size).astype(int)
         self.state_hidden_num = state_hidden_num
-        self.action_hidden_size = action_hidden_size if isinstance(action_hidden_size, list) else np.ones(action_hidden_num)*action_hidden_size
+        self.action_hidden_size = action_hidden_size if isinstance(action_hidden_size, list) else (np.ones(action_hidden_num)*action_hidden_size).astype(int)
         self.action_hidden_num = action_hidden_num
+        self.trunk_hidden_size = trunk_hidden_size if isinstance(trunk_hidden_size, list) else (np.ones(trunk_hidden_num)*trunk_hidden_size).astype(int)
+        self.trunk_hidden_num = trunk_hidden_num
         self.learning_rate = learning_rate
         self.lrdecayrate = lrdecayrate
 
@@ -42,16 +44,16 @@ class Critic(nn.Module):
         # Both encoders must end with the same width for element-wise add
         fused_dim = state_hidden_size[-1]
         # Combine state and action layers
-        if len(trunk_hidden_num) == 0:                # identity passthrough
+        if self.trunk_hidden_num == 0:                # identity passthrough
             self.trunk = nn.Identity()
             last_dim = fused_dim
         else:
             t_layers, in_dim = [], fused_dim
-            for h in trunk_hidden_size:
+            for h in self.trunk_hidden_size:
                 t_layers += [nn.Linear(in_dim, h), nn.ReLU()]
                 in_dim = h
             self.trunk = nn.Sequential(*t_layers)
-            last_dim = trunk_hidden_size[-1]
+            last_dim = self.trunk_hidden_size[-1]
         # Final output layer
         self.q_out = nn.Linear(last_dim, 1)           # single output for Q
 
@@ -59,8 +61,6 @@ class Critic(nn.Module):
         #self.optimizer = torch.optim.SGD(self.parameters(), lr=self.learning_rate)
         #self.optimizer = torch.optim.RMSprop(self.parameters(), lr=self.learning_rate)
         #self.optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate)
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate, eps=1e-8)
-        self.scheduler = ExponentialLR(self.optimizer, gamma=lrdecayrate)  # Exponential decay
         #self.scheduler = StepLR(self.optimizer, step_size=1, gamma=0.1)  # Halve LR every 10 steps
 
 
