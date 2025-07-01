@@ -273,8 +273,8 @@ class Hatchery3_2_2:
         new_state.append(np.log(Neval+1))
         new_obs.append(np.log(Neval+1))
 
-        self.state = list(np.concatenate(new_state))
-        self.obs = list(np.concatenate(new_obs))
+        self.state = np.concatenate(new_state)
+        self.obs = np.concatenate(new_obs)
         return self.state, self.obs
 
     def step(self, a):
@@ -331,22 +331,21 @@ class Hatchery3_2_2:
             reward = self.extant - self.prodcost if a > 0 else self.extant
             done = False
 
-
             # update state & obs
             if self.discset == -1:
                 logN0_next = np.log(N0_next+1)
                 logN1_next = np.log(N1_next+1)
                 logNe_next = np.log(Ne_next+1)
                 logq_next = np.array([np.log(q_next+1)])
-                self.state = list(np.concatenate([logN0_next, logN1_next, logq_next, logNe_next]))
-                self.obs = list(np.concatenate([logN0_next, logN1_next, logq_next, logNe_next]))
+                self.state = np.concatenate([logN0_next, logN1_next, logq_next, logNe_next])
+                self.obs = np.concatenate([logN0_next, logN1_next, logq_next, logNe_next])
             else:
                 N0_next_idx = [self._discretize_idx(val, self.states['N0']) for val in N0_next]
                 N1_next_idx = [self._discretize_idx(val, self.states['N1']) for val in N1_next]
                 q_next_idx = [self._discretize_idx(q_next, self.states['q'])]
                 Ne_next_idx = [self._discretize_idx(Ne_next, self.states['Ne'])]
-                self.state = list(np.concatenate([N0_next_idx, N1_next_idx, q_next_idx, Ne_next_idx]).astype(int))
-                self.obs = list(np.concatenate([N0_next_idx, N1_next_idx, q_next_idx, Ne_next_idx]).astype(int))
+                self.state = np.concatenate([N0_next_idx, N1_next_idx, q_next_idx, Ne_next_idx]).astype(int)
+                self.obs = np.concatenate([N0_next_idx, N1_next_idx, q_next_idx, Ne_next_idx]).astype(int)
         else: # extinct
             reward = 0
             done = True

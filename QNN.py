@@ -3,7 +3,7 @@ from torch import nn
 from torchvision.transforms import ToTensor
 from torch.optim.lr_scheduler import ExponentialLR, StepLR
 from NoisyLinear import NoisyLinear
-
+import numpy as np
 # Define model
 class QNN(nn.Module):
     def __init__(self, state_size, action_size, hidden_size, hidden_num, learning_rate, state_min, state_max,lrdecayrate, noisy, distributional, atomn, Vmin, Vmax, normalize, fstack):

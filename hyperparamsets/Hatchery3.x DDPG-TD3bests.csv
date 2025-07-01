@@ -1,0 +1,7 @@
+﻿id,0
+lr,0.0001
+lrdecaytype,exp
+lrdecay,1
+minlr,inf
+hidden_num,3
+hidden_size,"[32,64,32]"
