@@ -1,4 +1,4 @@
-from ddpg_actor import Actor
+import shutil
 from ddpg_critic import Critic
 from OUNoise import OUNoise
 from ReplayBuffer import ReplayBuffer
@@ -12,10 +12,12 @@ from torch.optim.lr_scheduler import ExponentialLR, LambdaLR
 import pickle
 import os
 import copy
+from ddpg_actor import Actor
 from setup_logger import setup_logger
-from stacking import *
+from stacking2 import *
 from RunningMeanStd import RunningMeanStd
-
+from calc_performance2 import calc_performance
+from calc_performance2_parallel import calc_performance_parallel
 class DDPG():
     """Reinforcement Learning agent that learns using DDPG."""
     def __init__(self, env, paramdf, meta):
@@ -24,6 +26,7 @@ class DDPG():
         paramdf: DataFrame containing hyperparameters for the agent (Dict).
         meta: Metadata (paramid, iteration, seed) for the agent.
         """
+        self.paramdf = paramdf
         # define parameters
         self.env = env
         # some path and logging settings    
@@ -42,8 +45,8 @@ class DDPG():
         print(f'paramID: {self.paramid}, iteration: {self.iteration}, seed: {self.seed}')
 
         # device for pytorch neural network
-        device = "cpu"
-        print(f"Using {device} device")
+        self.device = "cpu"
+        print(f"Using {self.device} device")
 
         # parameters
         ## NN parameters
@@ -73,7 +76,7 @@ class DDPG():
         else:
             self.critic_min_lr = float(paramdf['critic_minlr'])
         ## weight decay
-        self.critic_weight_decay = float(paramdf['weight_decay'])
+        self.critic_weight_decay = float(paramdf['critic_weight_decay'])
 
         ## standardize
         self.standardize = bool(int(paramdf['standardize']))
@@ -92,22 +95,43 @@ class DDPG():
         self.tau = float(paramdf['tau'])  # for soft update of target parameters
         self.fstack = int(paramdf['framestacking'])# framestacking
 
-        ## Training length parameters
+        ## Evaluation parameters
         self.evaluation_interval = int(paramdf['evaluation_interval'])
         self.performance_sampleN = int(paramdf['performance_sampleN'])
+        self.parallel_testing = bool(int(paramdf['parallel_testing']))  # whether to use parallel testing or not
+        ## Training length parameters
         self.max_steps = int(paramdf['max_steps'])
         self.episodenum = int(paramdf['episodenum'])
+
+        # print out the parameters
+        print(f'paramID: {self.paramid}, iteration: {self.iteration}, seed: {self.seed}')
+        print(f"device: {self.device}")
+        print(f"state size: {self.state_size}, action size: {self.action_size}")
+        print(f"actor: hidden num: {self.actor_hidden_num}, hidden size: {self.actor_hidden_size}")
+        print(f"critic: action hidden num: {self.critic_action_hidden_num}, action hidden size: {self.critic_action_hidden_size}")
+        print(f"critic: state hidden num: {self.critic_state_hidden_num}, state hidden size: {self.critic_state_hidden_size}")
+        print(f"critic: trunk hidden num: {self.critic_trunk_hidden_num}, trunk hidden size: {self.critic_trunk_hidden_size}")
+        print(f"actor lr: {self.actor_lr}, actor lr decay rate: {self.actor_lrdecayrate}, actor min lr: {self.actor_min_lr}")
+        print(f"critic lr: {self.critic_lr}, critic lr decay rate: {self.critic_lrdecayrate}, critic min lr: {self.critic_min_lr}")
+        print(f"critic weight decay: {self.critic_weight_decay}")
+        print(f"standardize: {self.standardize}")
+        print(f"exploration: mu: {self.exploration_mu}, theta: {self.exploration_theta}, sigma: {self.exploration_sigma}")
+        print(f"buffer size: {self.buffer_size}, batch size: {self.batch_size}")
+        print(f"gamma: {self.gamma}, tau: {self.tau}")
+        print(f"fstack: {self.fstack}")
+        print(f"evaluation interval: {self.evaluation_interval}, performance sampleN: {self.performance_sampleN}")
+        print(f"max steps: {self.max_steps}, episodenum: {self.episodenum}")
 
         ##############################################
         # setting up the network, exploration noise, and replay buffer
 
         ## Actor (Policy) Model
-        self.actor_local = Actor(self.state_size, self.action_size, self.actor_hidden_size, self.actor_hidden_num,
+        self.actor_local = Actor(self.state_size*self.fstack, self.action_size, self.actor_hidden_size, self.actor_hidden_num,
                                   self.actor_lrdecayrate, self.actor_lr)
         self.actor_target  = copy.deepcopy(self.actor_local)   # fast one-liner
 
         ## Critic (Value) Model
-        self.critic_local = Critic(self.state_size, self.action_size, self.critic_state_hidden_size, self.critic_state_hidden_num,
+        self.critic_local = Critic(self.state_size*self.fstack, self.action_size, self.critic_state_hidden_size, self.critic_state_hidden_num,
                                     self.critic_action_hidden_size, self.critic_action_hidden_num, self.critic_trunk_hidden_size,
                                     self.critic_trunk_hidden_num, self.critic_lrdecayrate, self.critic_lr)
         self.critic_target = copy.deepcopy(self.critic_local)   # fast one-liner
@@ -120,7 +144,6 @@ class DDPG():
         self.critic_scheduler = ExponentialLR(self.critic_opt, gamma=self.critic_lrdecayrate)  # Exponential decay
         self.actor_scheduler = ExponentialLR(self.actor_opt, gamma=self.actor_lrdecayrate)  # Exponential decay
 
-
         # Freeze target nets so their params aren’t updated by optim.step()
         for p in self.actor_target.parameters():
             p.requires_grad = False
@@ -128,7 +151,7 @@ class DDPG():
             p.requires_grad = False
 
         ## standardization
-        rms = RunningMeanStd(len(env.obsspace_dim), self.max_steps) if self.standardize else None
+        self.rms = RunningMeanStd(len(env.obsspace_dim), self.max_steps) if self.standardize else None
 
         ## Noise process
         self.noise = OUNoise(self.action_size, self.exploration_mu, self.exploration_theta, self.exploration_sigma)
@@ -138,17 +161,17 @@ class DDPG():
 
     def reset_episode(self):
         self.noise.reset()
-        state = self.env.reset()
-        self.last_state = state
+        state, _ = self.env.reset()
+        self.last_state = state*self.fstack
         return state
 
-    def step(self, action, reward, next_state, done):
+    def storeNlearn(self, action, reward, next_state, done):
          # Save experience / reward
         self.memory.add(self.last_state, action, reward, next_state, done)
 
         # Learn, if enough samples are available in memory
         if len(self.memory) > self.batch_size:
-            experiences = self.memory.sample()
+            experiences = self.memory.sample(self.batch_size)
             self.learn(experiences)
 
         # Roll over last state and action
@@ -177,13 +200,14 @@ class DDPG():
         self.critic_opt.zero_grad()
         critic_loss.backward()
         self.critic_opt.step()
-
+        self.critic_scheduler.step() # Decay the learning rate
         # actor update
         actions_pred = self.actor_local(states)
         actor_loss   = -self.critic_local(states, actions_pred).mean()
         self.actor_opt.zero_grad()
         actor_loss.backward()
         self.actor_opt.step()
+        self.actor_scheduler.step() # Decay the learning rate
 
         # 5. Soft-update target nets
         self.soft_update(self.critic_local, self.critic_target, self.tau)
@@ -198,22 +222,89 @@ class DDPG():
         """Train the agent"""
         n_episodes = self.episodenum
         max_t = self.max_steps  # max steps per episode
-        scores = []
+        fstack = self.fstack  # frame stacking
 
+        scores = [] # online scores
+        inttestscores = [] # interval test scores
         for i_episode in range(1, n_episodes + 1):
             state = self.reset_episode()  # this resets both env and internal noise
             score = 0.0
-
+            state = self.rms.normalize(self.env.obs) if self.standardize else self.env.obs
+            state = state * fstack
             for t in range(max_t):
-                action = self.actor_local.act(state)  # get action from actor (with noise for exploration)
+                action = self.actor_local.act(state,self.noise)  # get action from actor (with noise for exploration)
                 next_state, reward, done, _ = self.env.step(action)  # step in the env
-
-                self.step(action, reward, next_state, done)  # this triggers learning
+                next_state = self.rms.normalize(next_state) if self.standardize else next_state # standardize
+                if self.standardize: # standardize
+                    self.rms.stored_batch.append(next_state) # store the state for running mean std calculation
+                    next_state = self.rms.normalize(next_state)
+                    if self.rms.rolloutnum >= self.rms.updateN:
+                        self.rms.update()
+                    self.rms.rolloutnum += 1
+                next_state = stacking(self.env, state, next_state) # stack
+                self.storeNlearn(action, reward, next_state, done)  # adds transition to memory and learns from sampling
                 state = next_state
                 score += reward
-
                 if done:
                     break
-
             scores.append(score)
-            print(f"Episode {i_episode}\tScore: {score:.2f}")
+            if i_episode % 100 == 0:
+                print(f"Episode {i_episode}\tScore: {score:.2f}")
+            if self.critic_min_lr != float('-inf'):
+                if self.critic_optimizer.param_groups[0]['lr'] < self.critic_min_lr:
+                    self.critic_optimizer.param_groups[0]['lr'] = self.critic_min_lr
+            if self.actor_min_lr != float('-inf'):
+                if self.actor_optimizer.param_groups[0]['lr'] < self.actor_min_lr:
+                    self.actor_optimizer.param_groups[0]['lr'] = self.actor_min_lr
+
+            if i_episode % self.evaluation_interval == 0: # calculate average reward every evaluation interval episodes
+                if self.parallel_testing:
+                    inttestscore = calc_performance_parallel(self.env, self.device, self.seed, self.paramdf['envconfig'], self.rms, self.fstack, self.actor_local, self.performance_sampleN, self.max_steps)
+                else:
+                    inttestscore = calc_performance(self.env,self.device,self.rms,self.fstack,self.actor_local,self.performance_sampleN,self.max_steps)
+                inttestscores.append(inttestscore)
+                torch.save(self.actor_local, f"{self.testwd}/PolicyNetwork_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_DDPG_episode{i_episode}.pt")
+                # save the running mean and sd/var as well for this episode in pickle
+                if self.standardize:
+                    with open(f"{self.testwd}/rms_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_DQN_episode{i_episode}.pkl", "wb") as file:
+                        pickle.dump(self.rms, file)
+                critic_current_lr = self.critic_opt.param_groups[0]['lr']
+                actor_current_lr = self.actor_opt.param_groups[0]['lr']
+                print(f"Episode {i_episode}, Learning Rate: A{actor_current_lr}/C{critic_current_lr} Avg Performance: {inttestscore:.2f}")
+                print('-----------------------------------')        
+
+        print('calculating the average reward with the final Q network')
+        if self.parallel_testing:
+            final_testscore = calc_performance_parallel(self.env, self.device, self.seed, self.paramdf['envconfig'], self.rms, self.fstack, self.actor_local, self.performance_sampleN, self.max_steps)
+        else:
+            final_testscore = calc_performance(self.env,self.device,self.rms,self.fstack,self.actor_local,self.performance_sampleN,self.max_steps)
+        inttestscores.append(final_testscore)
+        print(f'final average reward: {final_testscore:.2f}')
+        torch.save(self.actor_local, f"{self.testwd}/PolicyNetwork_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_DDPG_episode{i_episode}.pt")
+        if self.standardize:
+            with open(f"{self.testwd}/rms_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_DDPG_episode{i_episode}.pkl", "wb") as file:
+                pickle.dump(self.rms, file)
+
+        # save results and performance metrics.
+        ## save last model
+        torch.save(self.actor_local, f"{self.testwd}/PolicyNetwork_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_DDPG.pt")
+        if self.standardize:
+            with open(f"{self.testwd}/rms_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_DDPG.pkl", "wb") as file:
+                pickle.dump(self.rms, file)
+
+        ## save best model
+        bestidx = np.array(inttestscores).argmax()
+        bestfilename = f"{self.testwd}/PolicyNetwork_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_DDPG_episode{(bestidx+1)*self.evaluation_interval}.pt"
+        print(f'best Policy network found at episode {bestidx*self.evaluation_interval}')
+        shutil.copy(bestfilename, f"{self.testwd}/bestPolicyNetwork_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_DDPG.pt")
+
+        ## save performance
+        np.save(f"{self.testwd}/rewards_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_DDPG.npy", inttestscores)
+
+        ## lastly save the configuration.
+        param_file_path = os.path.join(self.testwd, f"config.txt")
+        with open(param_file_path, 'w') as param_file:
+            for key, value in self.paramdf.items():
+                param_file.write(f"{key}: {value}\n")
+
+        return self.actor_local, inttestscores

@@ -2,7 +2,8 @@ import random
 from collections import namedtuple, deque
 
 class ReplayBuffer:
-    """Fixed-size buffer to store experience tuples."""
+    """Fixed-size buffer to store experience tuples.
+        buffer for DDPG/TD3 algorithms."""
 
     def __init__(self, buffer_size, batch_size):
         """Initialize a ReplayBuffer object.

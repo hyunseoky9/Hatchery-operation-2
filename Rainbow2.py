@@ -269,8 +269,6 @@ def Rainbow2(env,paramdf, meta):
         stack = S*fstack # set stack
         previous_a = 0
         done = False
-        if i % 200 ==0:
-            foo = 0
         t = 0 # timestep num
         termination_t = 0 
         while done == False:

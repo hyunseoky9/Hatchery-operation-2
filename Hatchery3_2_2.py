@@ -275,7 +275,7 @@ class Hatchery3_2_2:
 
         self.state = np.concatenate(new_state)
         self.obs = np.concatenate(new_obs)
-        return self.state, self.obs
+        return self.obs, self.state
 
     def step(self, a):
         extra_info = {}
@@ -297,7 +297,10 @@ class Hatchery3_2_2:
             # demographic stuff (stocking and winter survival)
             Mw = np.exp(np.random.normal(self.lMwmu, self.lMwsd))
             stockedNsurvived = a*self.maxcap*self.irphi
-            N0 = N0 + stockedNsurvived# stocking san acacia (t=3) in the fall
+            try:
+                N0 = N0 + stockedNsurvived # stocking san acacia (t=3) in the fall
+            except ValueError:
+                foo = 0
             N0 = np.minimum(N0*np.exp(-150*Mw),np.ones(self.n_reach)*self.N0minmax[1]) # stocking san acacia (t=3) in the fall
             N1 = N1*np.exp(-150*Mw)
             p = stockedNsurvived*np.exp(-150*Mw) # Total number of fish stocked in a season that make it to breeding season
@@ -350,7 +353,7 @@ class Hatchery3_2_2:
         else: # extinct
             reward = 0
             done = True
-        return reward, done, extra_info
+        return self.obs, reward, done, extra_info
 
     def state_discretization(self, discretization_set):
         """
@@ -690,7 +693,7 @@ class Hatchery3_2_2:
             x = stocked_cont/total_cont
             mu_k = self.fc[1]*self.irphi*np.exp(-150*np.prod(np.exp(self.lMwmu))**(1/3))
             #Neh = np.maximum(mu_k*(2*Nb - 1)/4, 0) # variance effective population size of hatchery population
-            Neh = Nb
+            Neh = np.array([Nb])
             # apply Ryman-Laikre effect to calculate effective population size
             if Neh == 0 or New == 0 or (x**2/Neh + (1-x)**2/(New))==0:
                 foo = 0

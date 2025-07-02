@@ -45,7 +45,7 @@ class Actor(nn.Module):
     def act(self, state, ou_process, device="cpu"):
         with torch.no_grad():
             # 1. tensor-ise state and add batch dim
-            s = torch.as_tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
+            s = torch.as_tensor(state.copy(), dtype=torch.float32, device=device).unsqueeze(0)
             logits = self.body(s).squeeze(0) # shape [K]
             # 3. OU noise in logit space
             noise  = torch.as_tensor(ou_process.sample(),

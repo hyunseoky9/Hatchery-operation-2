@@ -1,7 +1,29 @@
-import numpy as np
+from DDPG import *
+from call_paramset import call_paramset, call_env
 
-alpha = 737
-s0 = 0.188
-s1 = 0.064
-LM = np.array([[0,alpha,2*alpha],[s0,0,0],[0,s1,0]]) # leslie matrix
-eigenvalues, eigenvectors = np.linalg.eig(LM)
+if __name__ == "__main__":
+    paramid = 1 # test id = 4
+    iteration_num = 1
+    hyperparameterization_set_filename = './hyperparamsets/Hatchery3.x DDPG-TD3bests.csv'
+    paramdflist = call_paramset(hyperparameterization_set_filename,paramid)
+    tuneset = 1
+    for paramdf in paramdflist:
+        for iteration in range(iteration_num):
+            seed = paramdf['seed'] # make sure iteration_num matches with the number of seeds if seeds are specified
+            if seed == 'random':
+                seednum = random.randint(0,1000000)
+            else:
+                seednum = int(seed)
+            os.environ["PYTHONHASHSEED"] = str(seednum)
+            random.seed(seednum)
+            np.random.seed(seednum)
+            torch.manual_seed(seednum)
+            # environment configuration
+            env = call_env(paramdf)
+            meta = {'paramid': paramid, 'iteration': iteration, 'seed': seednum}
+            agent = DDPG(env, paramdf,meta)
+            agent.train()
+            
+            
+            #Q_discrete, policy,  MSE, rewards, final_avgreward = Rainbow2(env,paramdf,meta)
+        tuneset += 1
