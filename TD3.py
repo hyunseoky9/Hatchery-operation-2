@@ -122,6 +122,7 @@ class TD3():
         print(f"standardize: {self.standardize}")
         print(f"exploration: mu: {self.exploration_mu}, theta: {self.exploration_theta}, sigma: {self.exploration_sigma}")
         print(f"buffer size: {self.buffer_size}, batch size: {self.batch_size}")
+        print(f"policy delay: {self.policy_delay}, target noise: {self.target_noise}, target noise clip: {self.target_noise_clip}")
         print(f"gamma: {self.gamma}, tau: {self.tau}")
         print(f"fstack: {self.fstack}")
         print(f"evaluation interval: {self.evaluation_interval}, performance sampleN: {self.performance_sampleN}")
@@ -220,6 +221,14 @@ class TD3():
         self.actor_opt.step()
         self.actor_scheduler.step() # Decay the learning rate
 
+        # if there's a minimum learning rate, don't go below it. 
+        if self.critic_min_lr != float('-inf'):
+            if self.critic_opt.param_groups[0]['lr'] < self.critic_min_lr:
+                self.critic_opt.param_groups[0]['lr'] = self.critic_min_lr
+        if self.actor_min_lr != float('-inf'):
+            if self.actor_opt.param_groups[0]['lr'] < self.actor_min_lr:
+                self.actor_opt.param_groups[0]['lr'] = self.actor_min_lr
+
         # 5. Soft-update target nets
         self.soft_update(self.critic_local, self.critic_target, self.tau)
         self.soft_update(self.actor_local,  self.actor_target,  self.tau)
@@ -261,12 +270,6 @@ class TD3():
             scores.append(score)
             if i_episode % 100 == 0:
                 print(f"Episode {i_episode}\tScore: {score:.2f}")
-            if self.critic_min_lr != float('-inf'):
-                if self.critic_optimizer.param_groups[0]['lr'] < self.critic_min_lr:
-                    self.critic_optimizer.param_groups[0]['lr'] = self.critic_min_lr
-            if self.actor_min_lr != float('-inf'):
-                if self.actor_optimizer.param_groups[0]['lr'] < self.actor_min_lr:
-                    self.actor_optimizer.param_groups[0]['lr'] = self.actor_min_lr
 
             if i_episode % self.evaluation_interval == 0: # calculate average reward every evaluation interval episodes
                 if self.parallel_testing:

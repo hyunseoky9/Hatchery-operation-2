@@ -209,6 +209,14 @@ class DDPG():
         self.actor_opt.step()
         self.actor_scheduler.step() # Decay the learning rate
 
+        # if there's a minimum learning rate, don't go below it. 
+        if self.critic_min_lr != float('-inf'):
+            if self.critic_opt.param_groups[0]['lr'] < self.critic_min_lr:
+                self.critic_opt.param_groups[0]['lr'] = self.critic_min_lr
+        if self.actor_min_lr != float('-inf'):
+            if self.actor_opt.param_groups[0]['lr'] < self.actor_min_lr:
+                self.actor_opt.param_groups[0]['lr'] = self.actor_min_lr
+
         # 5. Soft-update target nets
         self.soft_update(self.critic_local, self.critic_target, self.tau)
         self.soft_update(self.actor_local,  self.actor_target,  self.tau)
@@ -250,12 +258,6 @@ class DDPG():
             scores.append(score)
             if i_episode % 100 == 0:
                 print(f"Episode {i_episode}\tScore: {score:.2f}")
-            if self.critic_min_lr != float('-inf'):
-                if self.critic_optimizer.param_groups[0]['lr'] < self.critic_min_lr:
-                    self.critic_optimizer.param_groups[0]['lr'] = self.critic_min_lr
-            if self.actor_min_lr != float('-inf'):
-                if self.actor_optimizer.param_groups[0]['lr'] < self.actor_min_lr:
-                    self.actor_optimizer.param_groups[0]['lr'] = self.actor_min_lr
 
             if i_episode % self.evaluation_interval == 0: # calculate average reward every evaluation interval episodes
                 if self.parallel_testing:
