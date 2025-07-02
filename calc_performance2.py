@@ -22,7 +22,7 @@ def calc_performance(env, device, rms, fstack, policy, episodenum=1000, t_maxste
     for i in range(episodenum):
         rewards = 0
         env.reset()
-        stack = rms.normalize(env.obs)*fstack if rms is not None else env.obs*fstack
+        stack = np.concatenate([rms.normalize(env.obs)]*fstack) if rms is not None else np.concatenate([env.obs]*fstack)
         done = False
         t = 0
         while done == False:

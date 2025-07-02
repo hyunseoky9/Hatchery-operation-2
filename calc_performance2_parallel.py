@@ -81,7 +81,7 @@ def worker(policy, workerepisodenum, rms, worker_id, envinit_params, t_maxstep, 
     for i in range(workerepisodenum):
         rewards = 0
         env.reset()
-        stack = rms.normalize(env.obs)*fstack if rms is not None else env.obs*fstack
+        stack = np.concatenate([rms.normalize(env.obs)]*fstack) if rms is not None else np.concatenate([env.obs]*fstack)
         done = False
         t = 0
         while done == False:

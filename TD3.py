@@ -19,7 +19,7 @@ from RunningMeanStd import RunningMeanStd
 from calc_performance2 import calc_performance
 from calc_performance2_parallel import calc_performance_parallel
 class TD3():
-    """Reinforcement Learning agent that learns using DDPG."""
+    """Reinforcement Learning agent that learns using TD3."""
     def __init__(self, env, paramdf, meta):
         """
         env: Environment object that provides the state and action space.
@@ -35,12 +35,12 @@ class TD3():
         self.iteration = meta['iteration']
         self.seed = meta['seed'] 
         ## Define the path for the new directory
-        self.parent_directory = './DDPG results'
+        self.parent_directory = './TD3 results'
         self.new_directory = f'seed{self.seed}_paramset{self.paramid}'
         self.path = os.path.join(self.parent_directory, self.new_directory)
         ## set path
         os.makedirs(self.path, exist_ok=True)
-        self.testwd = f'./DDPG results/{self.new_directory}'
+        self.testwd = f'./TD3 results/{self.new_directory}'
         self.logger = setup_logger(self.testwd) ## set up logging
         print(f'paramID: {self.paramid}, iteration: {self.iteration}, seed: {self.seed}')
 
@@ -63,8 +63,8 @@ class TD3():
         self.critic_trunk_hidden_size = eval(paramdf['critic_trunk_hidden_size'])
 
         ## TD3 parameters
-        self.policy_delay = int(paramdf['policy_delay'])  # delay for policy updates
-        self.target_noise = float(paramdf['target_noise'])  # noise for target policy smoothing
+        self.policy_delay = int(paramdf['policy_delay'])  # delay term "d" for policy updates
+        self.target_noise = float(paramdf['target_noise'])  # noise for target policy smoothing (standard deviation of Gaussian noise)
         self.target_noise_clip = float(paramdf['target_noise_clip']) # noise clipping for target policy smoothing
 
         ## Learning rate
@@ -133,18 +133,18 @@ class TD3():
 
         ## Actor (Policy) Model
         self.actor_local = Actor(self.state_size*self.fstack, self.action_size, self.actor_hidden_size, self.actor_hidden_num,
-                                  self.actor_lrdecayrate, self.actor_lr)
-        self.actor_target  = copy.deepcopy(self.actor_local)
+                                  self.actor_lrdecayrate, self.actor_lr).to(self.device)
+        self.actor_target  = copy.deepcopy(self.actor_local).to(self.device)
 
         ## Critic (Value) Model
         self.critic1_local = Critic(self.state_size*self.fstack, self.action_size, self.critic_state_hidden_size, self.critic_state_hidden_num,
                                     self.critic_action_hidden_size, self.critic_action_hidden_num, self.critic_trunk_hidden_size,
-                                    self.critic_trunk_hidden_num, self.critic_lrdecayrate, self.critic_lr)
+                                    self.critic_trunk_hidden_num, self.critic_lrdecayrate, self.critic_lr).to(self.device)
         self.critic2_local = Critic(self.state_size*self.fstack, self.action_size, self.critic_state_hidden_size, self.critic_state_hidden_num,
                                     self.critic_action_hidden_size, self.critic_action_hidden_num, self.critic_trunk_hidden_size,
-                                    self.critic_trunk_hidden_num, self.critic_lrdecayrate, self.critic_lr)
-        self.critic1_target = copy.deepcopy(self.critic1_local)
-        self.critic2_target = copy.deepcopy(self.critic2_local)
+                                    self.critic_trunk_hidden_num, self.critic_lrdecayrate, self.critic_lr).to(self.device)
+        self.critic1_target = copy.deepcopy(self.critic1_local).to(self.device)
+        self.critic2_target = copy.deepcopy(self.critic2_local).to(self.device)
 
         ## Optimizers
         self.critic1_opt = torch.optim.Adam(self.critic1_local.parameters(), lr=self.critic_lr, weight_decay=self.critic_weight_decay, eps=1e-8)
@@ -156,10 +156,16 @@ class TD3():
         self.critic2_scheduler = ExponentialLR(self.critic2_opt, gamma=self.critic_lrdecayrate)  # Exponential decay
         self.actor_scheduler = ExponentialLR(self.actor_opt, gamma=self.actor_lrdecayrate)  # Exponential decay
 
+        ## initialize step counter for delayed updates
+        self.learn_step = 0
+
+
         # Freeze target nets so their params aren’t updated by optim.step()
         for p in self.actor_target.parameters():
             p.requires_grad = False
-        for p in self.critic_target.parameters():
+        for p in self.critic1_target.parameters():
+            p.requires_grad = False
+        for p in self.critic2_target.parameters():
             p.requires_grad = False
 
         ## standardization
@@ -201,37 +207,54 @@ class TD3():
         next_states = torch.as_tensor(np.vstack([e.next_state for e in experiences]),dtype=torch.float32, device=device)
 
         # critic target 
-        with torch.no_grad():                                   # <– no grads here
-            actions_next   = self.actor_target(next_states)     # μ′(s′)
-            q_targets_next = self.critic_target(next_states, actions_next)
-            q_targets      = rewards + self.gamma * q_targets_next * (1 - dones)
-        
+        with torch.no_grad():
+            logits_next = self.actor_target.body(next_states) # shape [B, K]
+            noise = torch.normal(mean=0.0,std=self.target_noise,size=logits_next.shape,device=logits_next.device) # Gaussian exploration noise
+            noise = noise.clamp(-self.target_noise_clip,self.target_noise_clip) # clip the noise element-wise
+            actions_next = torch.softmax(logits_next + noise, dim=-1)  # shape [B, K]
+            q1_targets_next = self.critic1_target(next_states, actions_next) # there should be 2 critics.
+            q2_targets_next = self.critic2_target(next_states, actions_next) # there should be 2 critics.
+            q_targets      = rewards + self.gamma * torch.min(q1_targets_next, q2_targets_next) * (1 - dones)
+
         # critic update
-        q_expected   = self.critic_local(states, actions)
-        critic_loss  = F.mse_loss(q_expected, q_targets)
-        self.critic_opt.zero_grad()
-        critic_loss.backward()
-        self.critic_opt.step()
-        self.critic_scheduler.step() # Decay the learning rate
-        # actor update
-        actions_pred = self.actor_local(states)
-        actor_loss   = -self.critic_local(states, actions_pred).mean()
-        self.actor_opt.zero_grad()
-        actor_loss.backward()
-        self.actor_opt.step()
-        self.actor_scheduler.step() # Decay the learning rate
+        q1_expected   = self.critic1_local(states, actions)
+        q2_expected   = self.critic2_local(states, actions)
+        critic1_loss  = F.mse_loss(q1_expected, q_targets)
+        critic2_loss  = F.mse_loss(q2_expected, q_targets)
 
-        # if there's a minimum learning rate, don't go below it. 
-        if self.critic_min_lr != float('-inf'):
-            if self.critic_opt.param_groups[0]['lr'] < self.critic_min_lr:
-                self.critic_opt.param_groups[0]['lr'] = self.critic_min_lr
-        if self.actor_min_lr != float('-inf'):
-            if self.actor_opt.param_groups[0]['lr'] < self.actor_min_lr:
-                self.actor_opt.param_groups[0]['lr'] = self.actor_min_lr
+        self.critic1_opt.zero_grad()
+        critic1_loss.backward()
+        self.critic1_opt.step()
+        self.critic1_scheduler.step() # Decay the learning rate
+        if self.critic_min_lr != float('-inf'): # if there's a minimum learning rate, don't go below it.
+            if self.critic1_opt.param_groups[0]['lr'] < self.critic_min_lr:
+                self.critic1_opt.param_groups[0]['lr'] = self.critic_min_lr
+        self.critic2_opt.zero_grad()
+        critic2_loss.backward()
+        self.critic2_opt.step()
+        self.critic2_scheduler.step() # Decay the learning rate
+        if self.critic_min_lr != float('-inf'): # if there's a minimum learning
+            if self.critic2_opt.param_groups[0]['lr'] < self.critic_min_lr:
+                self.critic2_opt.param_groups[0]['lr'] = self.critic_min_lr
+        self.learn_step += 1
 
-        # 5. Soft-update target nets
-        self.soft_update(self.critic_local, self.critic_target, self.tau)
-        self.soft_update(self.actor_local,  self.actor_target,  self.tau)
+        # delayed update for actor and target networks
+        if self.learn_step % self.policy_delay == 0:
+            # actor update
+            actions_pred = self.actor_local(states)
+            actor_loss   = -self.critic1_local(states, actions_pred).mean()
+            self.actor_opt.zero_grad()
+            actor_loss.backward()
+            self.actor_opt.step()
+            self.actor_scheduler.step() # Decay the learning rate
+            if self.actor_min_lr != float('-inf'):
+                if self.actor_opt.param_groups[0]['lr'] < self.actor_min_lr:
+                    self.actor_opt.param_groups[0]['lr'] = self.actor_min_lr
+
+            # 5. Soft-update target nets 
+            self.soft_update(self.critic1_local, self.critic1_target, self.tau)
+            self.soft_update(self.critic2_local, self.critic2_target, self.tau)
+            self.soft_update(self.actor_local,  self.actor_target,  self.tau)
 
     def soft_update(self, local_net, target_net, tau):
         """theta_target ← tau theta_local  +  (1-tau) theta_target"""
@@ -239,18 +262,18 @@ class TD3():
             t_param.data.mul_(1.0 - tau).add_(l_param.data, alpha=tau)
 
     def train(self):
-        """Train the agent"""
+        """Train the agent, test the trained agent every x episodes,
+        and save the checkpoint models and the final & best model"""
         n_episodes = self.episodenum
         max_t = self.max_steps  # max steps per episode
         fstack = self.fstack  # frame stacking
-
         scores = [] # online scores
         inttestscores = [] # interval test scores
         for i_episode in range(1, n_episodes + 1):
             state = self.reset_episode()  # this resets both env and internal noise
             score = 0.0
             state = self.rms.normalize(self.env.obs) if self.standardize else self.env.obs
-            state = state * fstack
+            state = np.concatenate([state] * fstack)
             for t in range(max_t):
                 action = self.actor_local.act(state,self.noise)  # get action from actor (with noise for exploration)
                 next_state, reward, done, _ = self.env.step(action)  # step in the env
@@ -277,15 +300,16 @@ class TD3():
                 else:
                     inttestscore = calc_performance(self.env,self.device,self.rms,self.fstack,self.actor_local,self.performance_sampleN,self.max_steps)
                 inttestscores.append(inttestscore)
-                torch.save(self.actor_local, f"{self.testwd}/PolicyNetwork_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_DDPG_episode{i_episode}.pt")
+                torch.save(self.actor_local, f"{self.testwd}/PolicyNetwork_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_TD3_episode{i_episode}.pt")
                 # save the running mean and sd/var as well for this episode in pickle
                 if self.standardize:
-                    with open(f"{self.testwd}/rms_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_DQN_episode{i_episode}.pkl", "wb") as file:
+                    with open(f"{self.testwd}/rms_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_TD3_episode{i_episode}.pkl", "wb") as file:
                         pickle.dump(self.rms, file)
-                critic_current_lr = self.critic_opt.param_groups[0]['lr']
+                critic1_current_lr = self.critic1_opt.param_groups[0]['lr']
+                critic2_current_lr = self.critic2_opt.param_groups[0]['lr']
                 actor_current_lr = self.actor_opt.param_groups[0]['lr']
-                print(f"Episode {i_episode}, Learning Rate: A{actor_current_lr}/C{critic_current_lr} Avg Performance: {inttestscore:.2f}")
-                print('-----------------------------------')        
+                print(f"Episode {i_episode}, Learning Rate: A{actor_current_lr}/C1{critic1_current_lr}/C2{critic2_current_lr} Avg Performance: {inttestscore:.2f}")
+                print('-----------------------------------')
 
         print('calculating the average reward with the final Q network')
         if self.parallel_testing:
@@ -294,26 +318,26 @@ class TD3():
             final_testscore = calc_performance(self.env,self.device,self.rms,self.fstack,self.actor_local,self.performance_sampleN,self.max_steps)
         inttestscores.append(final_testscore)
         print(f'final average reward: {final_testscore:.2f}')
-        torch.save(self.actor_local, f"{self.testwd}/PolicyNetwork_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_DDPG_episode{i_episode}.pt")
+        torch.save(self.actor_local, f"{self.testwd}/PolicyNetwork_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_TD3_episode{i_episode}.pt")
         if self.standardize:
-            with open(f"{self.testwd}/rms_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_DDPG_episode{i_episode}.pkl", "wb") as file:
+            with open(f"{self.testwd}/rms_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_TD3_episode{i_episode}.pkl", "wb") as file:
                 pickle.dump(self.rms, file)
 
         # save results and performance metrics.
         ## save last model
-        torch.save(self.actor_local, f"{self.testwd}/PolicyNetwork_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_DDPG.pt")
+        torch.save(self.actor_local, f"{self.testwd}/PolicyNetwork_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_TD3.pt")
         if self.standardize:
-            with open(f"{self.testwd}/rms_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_DDPG.pkl", "wb") as file:
+            with open(f"{self.testwd}/rms_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_TD3.pkl", "wb") as file:
                 pickle.dump(self.rms, file)
 
         ## save best model
         bestidx = np.array(inttestscores).argmax()
-        bestfilename = f"{self.testwd}/PolicyNetwork_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_DDPG_episode{(bestidx+1)*self.evaluation_interval}.pt"
-        print(f'best Policy network found at episode {bestidx*self.evaluation_interval}')
-        shutil.copy(bestfilename, f"{self.testwd}/bestPolicyNetwork_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_DDPG.pt")
+        bestfilename = f"{self.testwd}/PolicyNetwork_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_TD3_episode{(bestidx+1)*self.evaluation_interval}.pt"
+        print(f'best Policy network found at episode {(bestidx+1)*self.evaluation_interval}')
+        shutil.copy(bestfilename, f"{self.testwd}/bestPolicyNetwork_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_TD3.pt")
 
         ## save performance
-        np.save(f"{self.testwd}/rewards_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_DDPG.npy", inttestscores)
+        np.save(f"{self.testwd}/rewards_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_TD3.npy", inttestscores)
 
         ## lastly save the configuration.
         param_file_path = os.path.join(self.testwd, f"config.txt")

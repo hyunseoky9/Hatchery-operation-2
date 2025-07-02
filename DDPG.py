@@ -127,17 +127,17 @@ class DDPG():
 
         ## Actor (Policy) Model
         self.actor_local = Actor(self.state_size*self.fstack, self.action_size, self.actor_hidden_size, self.actor_hidden_num,
-                                  self.actor_lrdecayrate, self.actor_lr)
-        self.actor_target  = copy.deepcopy(self.actor_local)   # fast one-liner
+                                  self.actor_lrdecayrate, self.actor_lr).to(self.device)
+        self.actor_target  = copy.deepcopy(self.actor_local).to(self.device)   # fast one-liner
 
         ## Critic (Value) Model
         self.critic_local = Critic(self.state_size*self.fstack, self.action_size, self.critic_state_hidden_size, self.critic_state_hidden_num,
                                     self.critic_action_hidden_size, self.critic_action_hidden_num, self.critic_trunk_hidden_size,
-                                    self.critic_trunk_hidden_num, self.critic_lrdecayrate, self.critic_lr)
-        self.critic_target = copy.deepcopy(self.critic_local)   # fast one-liner
+                                    self.critic_trunk_hidden_num, self.critic_lrdecayrate, self.critic_lr).to(self.device)
+        self.critic_target = copy.deepcopy(self.critic_local).to(self.device)
 
-        ## Optimizers 
-        self.critic_opt = torch.optim.Adam(self.critic_local.parameters(), lr=self.critic_lr,weight_decay=self.critic_weight_decay, eps=1e-8)
+        ## Optimizers
+        self.critic_opt = torch.optim.Adam(self.critic_local.parameters(), lr=self.critic_lr, weight_decay=self.critic_weight_decay, eps=1e-8)
         self.actor_opt = torch.optim.Adam(self.actor_local.parameters(), lr=self.actor_lr, eps=1e-8)
 
         ## Schedulers
@@ -227,7 +227,8 @@ class DDPG():
             t_param.data.mul_(1.0 - tau).add_(l_param.data, alpha=tau)
 
     def train(self):
-        """Train the agent"""
+        """Train the agent, test the trained agent every x episodes,
+        and save the checkpoint models and the final & best model"""
         n_episodes = self.episodenum
         max_t = self.max_steps  # max steps per episode
         fstack = self.fstack  # frame stacking
@@ -268,7 +269,7 @@ class DDPG():
                 torch.save(self.actor_local, f"{self.testwd}/PolicyNetwork_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_DDPG_episode{i_episode}.pt")
                 # save the running mean and sd/var as well for this episode in pickle
                 if self.standardize:
-                    with open(f"{self.testwd}/rms_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_DQN_episode{i_episode}.pkl", "wb") as file:
+                    with open(f"{self.testwd}/rms_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_DDPG_episode{i_episode}.pkl", "wb") as file:
                         pickle.dump(self.rms, file)
                 critic_current_lr = self.critic_opt.param_groups[0]['lr']
                 actor_current_lr = self.actor_opt.param_groups[0]['lr']
@@ -297,7 +298,7 @@ class DDPG():
         ## save best model
         bestidx = np.array(inttestscores).argmax()
         bestfilename = f"{self.testwd}/PolicyNetwork_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_DDPG_episode{(bestidx+1)*self.evaluation_interval}.pt"
-        print(f'best Policy network found at episode {bestidx*self.evaluation_interval}')
+        print(f'best Policy network found at episode {(bestidx+1)*self.evaluation_interval}')
         shutil.copy(bestfilename, f"{self.testwd}/bestPolicyNetwork_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_DDPG.pt")
 
         ## save performance
