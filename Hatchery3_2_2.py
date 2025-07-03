@@ -297,14 +297,11 @@ class Hatchery3_2_2:
             # demographic stuff (stocking and winter survival)
             Mw = np.exp(np.random.normal(self.lMwmu, self.lMwsd))
             stockedNsurvived = a*self.maxcap*self.irphi
-            try:
-                N0 = N0 + stockedNsurvived # stocking san acacia (t=3) in the fall
-            except ValueError:
-                foo = 0
+            N0 = N0 + stockedNsurvived # stocking san acacia (t=3) in the fall
             N0 = np.minimum(N0*np.exp(-150*Mw),np.ones(self.n_reach)*self.N0minmax[1]) # stocking san acacia (t=3) in the fall
             N1 = N1*np.exp(-150*Mw)
             p = stockedNsurvived*np.exp(-150*Mw) # Total number of fish stocked in a season that make it to breeding season
-
+            Ne_score, Neh, _ = self.NeCalc0(N0,N1,p, self.Nb,None,None,1)
             # demographic stuff (reproductin and summer survival)
             delfall = np.concatenate(([self.delfall[0][0]],np.random.beta(self.delfall[0][1:],self.delfall[1][1:])))
             deldiff = np.concatenate(([self.deldiff[0][0]],np.random.beta(self.deldiff[0][1:],self.deldiff[1][1:])))
@@ -327,10 +324,8 @@ class Hatchery3_2_2:
             q_next, _ = self.flowmodel.nextflowNforecast(q) # springflow and forecast in spring
             q_next = q_next[0][0]
             # Ne calculation
-            Ne_next, Neh, New = self.NeCalc(N0,N1,p,self.Nb,genT,kappa)
-            extra_info['Ne'] = Ne_next
-            extra_info['Neh'] = Neh
-            extra_info['New'] = New
+            Ne_next, _, _ = self.NeCalc0(N0,N1,p,self.Nb,genT,kappa,0)
+            extra_info['Ne'] = Ne_next # Ne_wild is the Ne until you stock in the next fall.
             # reward & done
             reward = self.extant
             done = False
@@ -366,7 +361,7 @@ class Hatchery3_2_2:
                 "N0": list(np.linspace(self.N0minmax[0], self.N0minmax[1], 31)), # population size dim:(3)
                 "N1": list(np.linspace(self.N1minmax[0], self.N1minmax[1], 31)), # population size (3)
                 "q": list(np.linspace(self.qminmax[0], self.qminmax[1], 11)), # spring flow in Otowi (1)
-                "Ne": list(np.linspace(self.Neminmax[0], self.Neminmax[1], 11)), # heterozygosity (1)
+                "Ne": list(np.linspace(self.Neminmax[0], self.Neminmax[1], 11)), # Effective population size of the wild population BEFORE stocking (1)
             }
 
             observations = {
@@ -380,7 +375,7 @@ class Hatchery3_2_2:
                 "logN0": list(np.log(np.array(self.N0minmax)+1)), # log population size dim:(3)
                 "logN1": list(np.log(np.array(self.N1minmax)+1)), # log population size (3)
                 "logq": list(np.log(np.array(self.qminmax)+1)), # log spring flow in Otowi (Otowi) (1)
-                "logNe": list(np.log(np.array(self.Neminmax)+1)),
+                "logNe": list(np.log(np.array(self.Neminmax)+1)), # Effective population size of the wild population BEFORE stocking (1)
             }
             observations = {
                 "OlogN0": states['logN0'],
@@ -644,7 +639,70 @@ class Hatchery3_2_2:
             stock_scaled_flr[np.argsort(scaledfrac)[::-1][0:np.abs(round(margin))]] += 1
         return list(stock_scaled_flr.astype(int))
 
-    def NeCalc(self, N0, N1, p, Nb, genT,kappa):
+    def NeCalc0(self, N0, N1, p, Nb, genT,kappa, season):
+        """
+        Calculate the effective population size (Ne). 
+        intput:
+            p: total number of fish stocked and survived to breeding season
+            Nb: number of broodstock used for production
+            N0: total population size of age 0 fish (1)
+            N1: total population size of age 1+ fish (1)
+            kappa: larval carrying capacity (3)
+            season: 0= spring, 1=fall, in spring, only Ne = New, in fall Ne = f(New,Neh)
+        output: Ne value 
+        """
+        if season == 0: # spring
+            # calculate wild population's Ne
+            factor = 0
+            totN0 = np.sum(N0)
+            totN1 = np.sum(N1)
+            for lkappaaidx,lkappaa in enumerate(self.angolkappa_midvalues):
+                for lkappaiidx, lkappai in enumerate(self.isllkappa_midvalues):
+                    if self.lkappa_prob[lkappaaidx, lkappaiidx] > 1e-3:
+                        kappaval = np.exp(np.array([lkappaa,lkappai,lkappai])) # average the isleta and angostura L values
+                        effspawner = N0 + self.beta_2*N1 # effective number of spawners
+                        # vecotrize calculating b 
+                        alphavals = (np.concatenate(([self.alpha], self.alpha_centers)))[:,None]
+                        denom = 1 + alphavals*effspawner/kappaval
+                        numeratorf1 = alphavals*N0
+                        numeratorfa = alphavals*self.beta_2*N1
+                        f1 = (np.sum(numeratorf1/denom,axis=1))/totN0
+                        fa = (np.sum(numeratorfa/denom,axis=1))/totN1
+                        bvals = np.matmul(self.sj[:,None], ((f1*totN0+fa*totN1)/(totN0+totN1))[None,:])
+                        b = bvals[:,0] # actual b value with mean alpha value
+                        recruitvar = np.sum((bvals[:,1:] - b[:,None])**2 * np.tile(self.alphaprob[None,:], (len(self.sj),1)),axis=1) # sigma^2 in Myhre et al. 2016, variance in the number of recruits produced by a single spawner (basically variance of B where mean is b)
+                        grate = self.sa + b/2 # definition of lambda in Myhre et al. 2016
+                        var_dg = self.sa*(1-self.sa) + b/4 + recruitvar/4  # sigma^2_dg in Myhre et al. 2016
+                        # calculate the expected generation time in pg 2433 of # Myhre et al. 2016
+                        #genT +=  np.sum(grate/(grate - self.sa) * self.lkappa_prob[lkappaaidx, lkappaiidx] * self.combo_delfallprob) # generation time given the population size
+                        # calculate the factor in eq 4 of myhre et al. 2016
+                        factor += np.sum(var_dg/(grate**2) * self.lkappa_prob[lkappaaidx, lkappaiidx] * self.combo_delfallprob)
+            New = (totN0+totN1)/factor
+            New = np.array([New / genT]) # generation time adjusted wild Ne.
+            return New, 0, New
+        else:
+            New = np.exp(self.state[self.sidx['logNe'][0]]) - 1
+            # calculate hatchery population's Ne
+            if np.sum(p) == 0: # if no fish are stocked, then Ne = New
+                Ne = np.array([New])
+                Neh = np.array([0])
+            else:
+                stocked_cont = np.sum(p)
+                total_cont = np.sum(N0)
+                x = stocked_cont/(total_cont + stocked_cont)
+                #effspawner = N0 + self.beta_2*N1 # effective number of spawners
+                #stocked_cont = np.sum((self.alpha*p)/(1 + self.alpha*effspawner/kappa)) # stocked fish contribution
+                #total_cont =  np.sum((self.alpha*(effspawner))/(1 + self.alpha*effspawner/kappa)) # wild fish contribution
+                #x = stocked_cont/(total_cont)
+                #mu_k = self.fc[1]*self.irphi*np.exp(-150*np.prod(np.exp(self.lMwmu))**(1/3))
+                #Neh = np.maximum(mu_k*(2*Nb - 1)/4, 0) # variance effective population size of hatchery population
+                Neh = Nb
+                # apply Ryman-Laikre effect to calculate effective population size
+                Ne = 1/(x**2/Neh + (1-x)**2/(New))
+            return Ne, Neh, New
+
+
+    def NeCalc(self, N0, N1, p, Nb, genT, kappa):
         """
         Calculate the effective population size (Ne). 
         intput:
@@ -689,14 +747,13 @@ class Hatchery3_2_2:
             Neh = np.array([0])
         else:
             effspawner = N0 + self.beta_2*N1 # effective number of spawners
+            x = stocked_cont/(total_cont + stocked_cont)
             stocked_cont = np.sum((self.alpha*p)/(1 + self.alpha*effspawner/kappa)) # stocked fish contribution
             total_cont =  np.sum((self.alpha*(effspawner))/(1 + self.alpha*effspawner/kappa)) # wild fish contribution
-            x = stocked_cont/total_cont
+            #x = stocked_cont/total_cont
             mu_k = self.fc[1]*self.irphi*np.exp(-150*np.prod(np.exp(self.lMwmu))**(1/3))
             #Neh = np.maximum(mu_k*(2*Nb - 1)/4, 0) # variance effective population size of hatchery population
             Neh = np.array([Nb])
             # apply Ryman-Laikre effect to calculate effective population size
-            if Neh == 0 or New == 0 or (x**2/Neh + (1-x)**2/(New))==0:
-                foo = 0
             Ne = 1/(x**2/Neh + (1-x)**2/(New))
         return Ne, Neh, New

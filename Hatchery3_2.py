@@ -443,7 +443,7 @@ class Hatchery3_2:
                 Nb_next = 2*a/self.fc[1] # number of broodstock needed to produce 'a' fish self.fc[1]=number of fish produced per age 2 female broodstock, which is multiplied by 2 b/c you need male and female.
                 p_next = np.zeros(self.n_reach)
                 # hydrological stuff. No springflow in fall (stays the same)
-                Ne_next, Neh, New = self.NeCalc0(N0,N1,p,Nb,genT,kappa,0)
+                Ne_next, Neh, New = self.NeCalc0(N0,N1,p,Nb,genT,0)
                 # reward & done
                 reward = self.extant - self.prodcost if a > 0 else self.extant
                 done = False
@@ -528,7 +528,7 @@ class Hatchery3_2:
                     p_next = p.copy()
                     p_next[t-1] = p[t-1] + a*self.irphi # stocking angostura (t=1) or isleta (t=2) in the fall
                     p_next = p_next*np.exp(-150*Mw)
-                    Ne_next, Neh, New = self.NeCalc0(N0_next,N1,p_next,Nb,None,None,1)
+                    Ne_next, Neh, New = self.NeCalc0(N0_next,N1_next,p_next,Nb,None,1)
                     extra_info['Ne'] = Ne_next
                     extra_info['Neh'] = Neh
                     extra_info['New'] = New
@@ -897,7 +897,7 @@ class Hatchery3_2:
             mask[fallidx] = falllegal
         return mask.astype(int)
 
-    def NeCalc0(self, N0, N1, p, Nb, genT,kappa, season):
+    def NeCalc0(self, N0, N1, p, Nb, genT, season):
         """
         Calculate the effective population size (Ne). 
         intput:
