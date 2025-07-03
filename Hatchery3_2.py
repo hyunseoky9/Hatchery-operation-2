@@ -110,6 +110,13 @@ class Hatchery3_2:
         self.lkappa_prob = lkappa_dataset['lkappaprob']
         self.angolkappa_midvalues = lkappa_dataset['angolkappa_midvalues']
         self.isllkappa_midvalues = lkappa_dataset['isllkappa_midvalues']
+        A,B             = np.meshgrid(self.angolkappa_midvalues,
+                                    self.isllkappa_midvalues,
+                                    indexing='ij')
+        mask            = self.lkappa_prob > 1e-3            # keep only useful combos
+        self.kappa_exp  = np.exp(np.stack([A[mask], B[mask], B[mask]], axis=-1))  # (nκ,3)
+        self.kappa_prob = self.lkappa_prob[mask]             # (nκ,)
+
         ## calculate different alpha values (number of eggs produced per spawner) and their probabilities in the posterior distribution
         ## (used for calculating sigma^2_{b_w} in the document Hatchery 3.2).
         # define ends (95% CI) of the posterior distribution
@@ -117,6 +124,7 @@ class Hatchery3_2:
         # calculate the probability for each bin
         self.alphaprob = norm.cdf(alphainterval[1:], loc=self.alpha, scale=np.sqrt(self.alphavar)) - norm.cdf(alphainterval[:-1], loc=self.alpha, scale=np.sqrt(self.alphavar))
         self.alpha_centers = (alphainterval[:-1] + alphainterval[1:]) / 2
+        self.alpha_vec  = np.hstack((self.alpha, self.alpha_centers))  # (nα,)
         ## get the probability distribution of river drying, delfall, and avg deldiff.
         bins = 5
         intervals = np.linspace(0,1,bins+1) # bin boundaries
@@ -911,30 +919,19 @@ class Hatchery3_2:
         """
         if season == 0: # spring
             # calculate wild population's Ne
-            factor = 0
-            totN0 = np.sum(N0)
-            totN1 = np.sum(N1)
-            for lkappaaidx,lkappaa in enumerate(self.angolkappa_midvalues):
-                for lkappaiidx, lkappai in enumerate(self.isllkappa_midvalues):
-                    if self.lkappa_prob[lkappaaidx, lkappaiidx] > 1e-3:
-                        kappaval = np.exp(np.array([lkappaa,lkappai,lkappai])) # average the isleta and angostura L values
-                        effspawner = N0 + self.beta_2*N1 # effective number of spawners
-                        # vecotrize calculating b 
-                        alphavals = (np.concatenate(([self.alpha], self.alpha_centers)))[:,None]
-                        denom = 1 + alphavals*effspawner/kappaval
-                        numeratorf1 = alphavals*N0
-                        numeratorfa = alphavals*self.beta_2*N1
-                        f1 = (np.sum(numeratorf1/denom,axis=1))/totN0
-                        fa = (np.sum(numeratorfa/denom,axis=1))/totN1
-                        bvals = np.matmul(self.sj[:,None], ((f1*totN0+fa*totN1)/(totN0+totN1))[None,:])
-                        b = bvals[:,0] # actual b value with mean alpha value
-                        recruitvar = np.sum((bvals[:,1:] - b[:,None])**2 * np.tile(self.alphaprob[None,:], (len(self.sj),1)),axis=1) # sigma^2 in Myhre et al. 2016, variance in the number of recruits produced by a single spawner (basically variance of B where mean is b)
-                        grate = self.sa + b/2 # definition of lambda in Myhre et al. 2016
-                        var_dg = self.sa*(1-self.sa) + b/4 + recruitvar/4  # sigma^2_dg in Myhre et al. 2016
-                        # calculate the expected generation time in pg 2433 of # Myhre et al. 2016
-                        #genT +=  np.sum(grate/(grate - self.sa) * self.lkappa_prob[lkappaaidx, lkappaiidx] * self.combo_delfallprob) # generation time given the population size
-                        # calculate the factor in eq 4 of myhre et al. 2016
-                        factor += np.sum(var_dg/(grate**2) * self.lkappa_prob[lkappaaidx, lkappaiidx] * self.combo_delfallprob)
+            totN0, totN1  = N0.sum(), N1.sum()
+            effspawner    = N0 + self.beta_2*N1                      # (3,)
+            alph             = self.alpha_vec[:,None,None]              # (nα,1,1)
+            kappa             = self.kappa_exp.T[None,:,:]               # (1,3,nκ)
+            denom         = 1 + alph*effspawner[:,None]/kappa               # (nα,3,nκ)
+            f1            = (alph*N0[:,None]/denom).sum(1)/totN0        # (nα,nκ)
+            fa            = (alph*self.beta_2*N1[:,None]/denom).sum(1)/totN1
+            bvals         = (self.sj[:,None,None]*( (f1*totN0+fa*totN1)/(totN0+totN1) )).transpose(1,0,2) # (nα,nκ,ndel)
+            b             = bvals[0]                                 # mean-α row
+            recruitvar    = ((bvals[1:] - b)**2 * self.alphaprob[:,None,None]).sum(0)
+            grate         = self.sa[:,None] + b/2
+            var_dg        = self.sa[:,None]*(1-self.sa[:,None]) + b/4 + recruitvar/4
+            factor = (var_dg/(grate**2) * self.kappa_prob * self.combo_delfallprob[:,None]).sum()
             New = (totN0+totN1)/factor
             New = np.array([New / genT]) # generation time adjusted wild Ne.
             return New, 0, New
