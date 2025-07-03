@@ -266,14 +266,14 @@ class TD3():
         and save the checkpoint models and the final & best model"""
         n_episodes = self.episodenum
         max_t = self.max_steps  # max steps per episode
-        fstack = self.fstack  # frame stacking
+        self.learn_step = 0
         scores = [] # online scores
         inttestscores = [] # interval test scores
         for i_episode in range(1, n_episodes + 1):
             state = self.reset_episode()  # this resets both env and internal noise
             score = 0.0
             state = self.rms.normalize(self.env.obs) if self.standardize else self.env.obs
-            state = np.concatenate([state] * fstack)
+            state = np.concatenate([state] * self.fstack)
             for t in range(max_t):
                 action = self.actor_local.act(state,self.noise)  # get action from actor (with noise for exploration)
                 next_state, reward, done, _ = self.env.step(action)  # step in the env

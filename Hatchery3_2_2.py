@@ -327,7 +327,7 @@ class Hatchery3_2_2:
             q_next, _ = self.flowmodel.nextflowNforecast(q) # springflow and forecast in spring
             q_next = q_next[0][0]
             # Ne calculation
-            Ne_next, Neh, New = self.NeCalc(N0,N1,p,self.Nb,genT)
+            Ne_next, Neh, New = self.NeCalc(N0,N1,p,self.Nb,genT,kappa)
             extra_info['Ne'] = Ne_next
             extra_info['Neh'] = Neh
             extra_info['New'] = New
@@ -644,7 +644,7 @@ class Hatchery3_2_2:
             stock_scaled_flr[np.argsort(scaledfrac)[::-1][0:np.abs(round(margin))]] += 1
         return list(stock_scaled_flr.astype(int))
 
-    def NeCalc(self, N0, N1, p, Nb, genT):
+    def NeCalc(self, N0, N1, p, Nb, genT,kappa):
         """
         Calculate the effective population size (Ne). 
         intput:
@@ -652,6 +652,7 @@ class Hatchery3_2_2:
             Nb: number of broodstock used for production
             N0: total population size of age 0 fish (1)
             N1: total population size of age 1+ fish (1)
+            kappa: carrying capacity of the population (3)
         output: Ne value 
         """
         # calculate wild population's Ne
@@ -661,11 +662,11 @@ class Hatchery3_2_2:
         for lkappaaidx,lkappaa in enumerate(self.angolkappa_midvalues):
             for lkappaiidx, lkappai in enumerate(self.isllkappa_midvalues):
                 if self.lkappa_prob[lkappaaidx, lkappaiidx] > 1e-3:
-                    kappa = np.exp(np.array([lkappaa,lkappai,lkappai])) # average the isleta and angostura L values
+                    kappaval = np.exp(np.array([lkappaa,lkappai,lkappai])) # average the isleta and angostura L values
                     effspawner = N0 + self.beta_2*N1 # effective number of spawners
                     # vecotrize calculating b 
                     alphavals = (np.concatenate(([self.alpha], self.alpha_centers)))[:,None]
-                    denom = 1 + alphavals*effspawner/kappa
+                    denom = 1 + alphavals*effspawner/kappaval
                     numeratorf1 = alphavals*N0
                     numeratorfa = alphavals*self.beta_2*N1
                     f1 = (np.sum(numeratorf1/denom,axis=1))/totN0
