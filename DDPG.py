@@ -16,6 +16,7 @@ from ddpg_actor import Actor
 from setup_logger import setup_logger
 from stacking2 import *
 from RunningMeanStd import RunningMeanStd
+from FixedMeanStd import FixedMeanStd
 from calc_performance2 import calc_performance
 from calc_performance2_parallel import calc_performance_parallel
 class DDPG():
@@ -42,7 +43,6 @@ class DDPG():
         os.makedirs(self.path, exist_ok=True)
         self.testwd = f'./DDPG results/{self.new_directory}'
         self.logger = setup_logger(self.testwd) ## set up logging
-        print(f'paramID: {self.paramid}, iteration: {self.iteration}, seed: {self.seed}')
 
         # device for pytorch neural network
         self.device = "cpu"
@@ -105,6 +105,7 @@ class DDPG():
 
         # print out the parameters
         print(f'paramID: {self.paramid}, iteration: {self.iteration}, seed: {self.seed}')
+        print(f"env: {self.env.envID}, parset: {self.env.parset}, discset: {self.env.discset}")
         print(f"device: {self.device}")
         print(f"state size: {self.state_size}, action size: {self.action_size}")
         print(f"actor: hidden num: {self.actor_hidden_num}, hidden size: {self.actor_hidden_size}")
@@ -127,13 +128,13 @@ class DDPG():
 
         ## Actor (Policy) Model
         self.actor_local = Actor(self.state_size*self.fstack, self.action_size, self.actor_hidden_size, self.actor_hidden_num,
-                                  self.actor_lrdecayrate, self.actor_lr).to(self.device)
+                                  self.actor_lrdecayrate, self.actor_lr, self.fstack).to(self.device)
         self.actor_target  = copy.deepcopy(self.actor_local).to(self.device)   # fast one-liner
 
         ## Critic (Value) Model
         self.critic_local = Critic(self.state_size*self.fstack, self.action_size, self.critic_state_hidden_size, self.critic_state_hidden_num,
                                     self.critic_action_hidden_size, self.critic_action_hidden_num, self.critic_trunk_hidden_size,
-                                    self.critic_trunk_hidden_num, self.critic_lrdecayrate, self.critic_lr).to(self.device)
+                                    self.critic_trunk_hidden_num, self.critic_lrdecayrate, self.critic_lr, self.fstack).to(self.device)
         self.critic_target = copy.deepcopy(self.critic_local).to(self.device)
 
         ## Optimizers
@@ -151,7 +152,8 @@ class DDPG():
             p.requires_grad = False
 
         ## standardization
-        self.rms = RunningMeanStd(len(env.obsspace_dim), self.max_steps) if self.standardize else None
+        self.rms = FixedMeanStd(env) if self.standardize else None
+        #self.rms = RunningMeanStd(len(env.obsspace_dim), self.max_steps) if self.standardize else None
 
         ## Noise process
         self.noise = OUNoise(self.action_size, self.exploration_mu, self.exploration_theta, self.exploration_sigma)
@@ -257,7 +259,7 @@ class DDPG():
                     break
             scores.append(score)
             if i_episode % 100 == 0:
-                print(f"Episode {i_episode}\tScore: {score:.2f}")
+                print(f"Episode {i_episode}")
 
             if i_episode % self.evaluation_interval == 0: # calculate average reward every evaluation interval episodes
                 if self.parallel_testing:
@@ -282,9 +284,9 @@ class DDPG():
             final_testscore = calc_performance(self.env,self.device,self.rms,self.fstack,self.actor_local,self.performance_sampleN,self.max_steps)
         inttestscores.append(final_testscore)
         print(f'final average reward: {final_testscore:.2f}')
-        torch.save(self.actor_local, f"{self.testwd}/PolicyNetwork_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_DDPG_episode{i_episode}.pt")
+        torch.save(self.actor_local, f"{self.testwd}/PolicyNetwork_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_DDPG_episode_final.pt")
         if self.standardize:
-            with open(f"{self.testwd}/rms_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_DDPG_episode{i_episode}.pkl", "wb") as file:
+            with open(f"{self.testwd}/rms_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_DDPG_episode_final.pkl", "wb") as file:
                 pickle.dump(self.rms, file)
 
         # save results and performance metrics.
@@ -296,8 +298,12 @@ class DDPG():
 
         ## save best model
         bestidx = np.array(inttestscores).argmax()
-        bestfilename = f"{self.testwd}/PolicyNetwork_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_DDPG_episode{(bestidx+1)*self.evaluation_interval}.pt"
-        print(f'best Policy network found at episode {(bestidx+1)*self.evaluation_interval}')
+        if bestidx == len(inttestscores) - 1:
+            bestfilename = f"{self.testwd}/PolicyNetwork_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_DDPG_episode_final.pt"
+            print(f'best Policy network found at final test')
+        else:
+            bestfilename = f"{self.testwd}/PolicyNetwork_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_DDPG_episode{(bestidx+1)*self.evaluation_interval}.pt"
+            print(f'best Policy network found at episode {(bestidx+1)*self.evaluation_interval}')
         shutil.copy(bestfilename, f"{self.testwd}/bestPolicyNetwork_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_DDPG.pt")
 
         ## save performance

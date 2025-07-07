@@ -53,7 +53,7 @@ def calc_performance_parallel(env, device, seed, config, rms, fstack, policy=Non
     for p in processes:
         p.join()
 
-    if env.envID in ['Hatchery3.2.2']:
+    if env.envID in ['Hatchery3.2.2', 'Hatchery3.2.3']:
         print('Action Distribution:')
         print(np.round((policy_info['actiondist']/policy_info['actiondistcount'].value).numpy(),2))
 
@@ -74,7 +74,7 @@ def worker(policy, workerepisodenum, rms, worker_id, envinit_params, t_maxstep, 
 
     totrewards_perworker = 0 # set reward counter.
 
-    if env.envID in ['Hatchery3.2.2']:
+    if env.envID in ['Hatchery3.2.2', 'Hatchery3.2.3']:
         actiondist = torch.zeros(action_size, dtype=torch.float32)
         actiondistcount = 0
 
@@ -92,7 +92,7 @@ def worker(policy, workerepisodenum, rms, worker_id, envinit_params, t_maxstep, 
                 s = torch.as_tensor(state.copy(), dtype=torch.float32, device=device).unsqueeze(0)
                 action = policy(s)
                 action = action.cpu().numpy().squeeze(0)
-                if env.envID in ['Hatchery3.2.2']:
+                if env.envID in ['Hatchery3.2.2', 'Hatchery3.2.3']:
                     actiondist += action
                     actiondistcount += 1
             _, reward, done, _ = env.step(action)

@@ -12,8 +12,8 @@ from AR1 import AR1
 
 class Hatchery3_2_2:
     """
-    same as Hatchery3.2 but there are no seasonalities anymore and there's only fall stocking decision to make.
-    Fall decisions are done in one step where the actionspace is a vector of 4 (proportion of fish to stock in each reach + discarding rest)
+    Same as hatchery 3.2, but all the fall actions are taken at once, and spring decision is not taken. It's assumed that maximum capacity is produced every year.
+    action is a vector of 4, where the first three are stocking proportions in angostura, isleta, and san acacia, and the last one is the discard proportion.
     """
     def __init__(self,initstate,parameterization_set,discretization_set,LC_prediction_method):
         self.envID = 'Hatchery3.2.2'
@@ -152,9 +152,6 @@ class Hatchery3_2_2:
         self.sa = np.exp(-124*M1 - 150*Mw)*((1 - delfall) + self.tau*delfall + (1 - self.tau)*self.r1*np.mean(self.phifall))
         self.sj =  np.prod(self.sj,axis=1)**(1/self.sj.shape[1]) # geometric mean of sj
         self.sa =  np.prod(self.sa,axis=1)**(1/self.sa.shape[1]) # geometric mean of sa
-           
-        
-
 
         ## get average of age 2+ fish 
         self.avgsa = np.sum(self.sa * self.combo_delfallprob)
@@ -162,7 +159,6 @@ class Hatchery3_2_2:
         
         # number of broodstock used for producing maximum capacity. Assumes maximum capacity is produced every year. 
         self.Nb = 2*self.maxcap/self.fc[1]
-
 
         # range for each variables
         self.N0minmax = [0,1e7] 
@@ -263,7 +259,7 @@ class Hatchery3_2_2:
             new_state.append(initstate[1])
             new_obs.append(initstate[1])
         # q & qhat
-        if initstate[2] == -1:
+        if initstate[3] == -1:
             if self.discset == -1:
                 qval = np.random.uniform(size=1)*(self.states['logq'][1] - self.states['logq'][0]) + self.states['logq'][0]
             else:
@@ -304,7 +300,7 @@ class Hatchery3_2_2:
         totN1 = np.sum(N1)
         a = a[0:self.n_reach] # only take the first n_reach elements of the action vector
         totpop = totN0 + totN1
-        if totpop >= self.Nth:
+        if (N0+N1)[1] >= 0: #self.Nth: #all((N0 + N1) >= self.Nth):
             # demographic stuff (stocking and winter survival)
             Mw = np.exp(np.random.normal(self.lMwmu, self.lMwsd))
             stockedNsurvived = a*self.maxcap*self.irphi
@@ -312,7 +308,8 @@ class Hatchery3_2_2:
             N0 = np.minimum(N0*np.exp(-150*Mw),np.ones(self.n_reach)*self.N0minmax[1]) # stocking san acacia (t=3) in the fall
             N1 = N1*np.exp(-150*Mw)
             p = stockedNsurvived*np.exp(-150*Mw) # Total number of fish stocked in a season that make it to breeding season
-            Ne_score, Neh, _ = self.NeCalc0(N0,N1,p, self.Nb,None,None,1)
+            Ne_score, Neh, Ne_base = self.NeCalc0(N0,N1,p, self.Nb,None,None,1)
+            extra_info['Ne_score'] = np.log(Ne_score) # Ne_score is the Ne until you stock in the next fall.
             # demographic stuff (reproductin and summer survival)
             delfall = np.concatenate(([self.delfall[0][0]],np.random.beta(self.delfall[0][1:],self.delfall[1][1:])))
             deldiff = np.concatenate(([self.deldiff[0][0]],np.random.beta(self.deldiff[0][1:],self.deldiff[1][1:])))
@@ -338,7 +335,7 @@ class Hatchery3_2_2:
             Ne_next, _, _ = self.NeCalc0(N0,N1,p,self.Nb,genT,kappa,0)
             extra_info['Ne'] = Ne_next # Ne_wild is the Ne until you stock in the next fall.
             # reward & done
-            reward = self.extant
+            reward = 1 + (np.log(Ne_score)[0] - np.log(Ne_base)) #self.extant +  #self.extant*(1/(1+np.exp(-0.001*(np.sum(N0+N1) - (np.log(1/0.01 - 1)/0.001) + self.Nth)))) # 0.001 = k, 0.01 = percentage of self.extant at Nth
             done = False
 
             # update state & obs
@@ -354,7 +351,7 @@ class Hatchery3_2_2:
                 N1_next_idx = [self._discretize_idx(val, self.states['N1']) for val in N1_next]
                 q_next_idx = [self._discretize_idx(q_next, self.states['q'])]
                 Ne_next_idx = [self._discretize_idx(Ne_next, self.states['Ne'])]
-                self.state = np.concatenate([N0_next_idx, N1_next_idx, q_next_idx, Ne_next_idx]).astype(int)
+                self.state = np.concatenate([N0_next_idx, N1_next_idx , q_next_idx, Ne_next_idx]).astype(int)
                 self.obs = np.concatenate([N0_next_idx, N1_next_idx, q_next_idx, Ne_next_idx]).astype(int)
         else: # extinct
             reward = 0
@@ -383,8 +380,8 @@ class Hatchery3_2_2:
             }
         elif discretization_set == -1: # continuous
             states = {
-                "logN0": list(np.log(np.array(self.N0minmax)+1)), # log population size dim:(3)
-                "logN1": list(np.log(np.array(self.N1minmax)+1)), # log population size (3)
+                "logN0": list(np.log(np.array(self.N0minmax)+1)), # log population size for age 0 dim:(3)
+                "logN1": list(np.log(np.array(self.N1minmax)+1)), # log population size for age 1+ (3)
                 "logq": list(np.log(np.array(self.qminmax)+1)), # log spring flow in Otowi (Otowi) (1)
                 "logNe": list(np.log(np.array(self.Neminmax)+1)), # Effective population size of the wild population BEFORE stocking (1)
             }
@@ -418,6 +415,8 @@ class Hatchery3_2_2:
             init_prop1 = (1 - init_ageprop) * np.random.dirichlet(np.ones(self.n_reach),size=1)[0] # initial proportion for age 1+
             init_pop0 = init_prop0*init_totpop
             init_pop1 = init_prop1*init_totpop
+            if any(init_pop0 + init_pop1 < self.Nth):
+                init_pop0 = np.maximum(init_pop0, (self.Nth + 100) - init_pop1)
             return np.log(init_pop0+1), np.log(init_pop1+1)
         else:
             init_totpop_idx = random.choices(np.arange(1,len(self.states['N0'])),k=1)[0] # initial total population size (don't let it be lowest state)
@@ -708,7 +707,7 @@ class Hatchery3_2_2:
             Ne = 1/(x**2/Neh + (1-x)**2/(New))
         return Ne, Neh, New
 
-    def NeCalc0(self, N0, N1, p, Nb, genT,kappa, season):
+    def NeCalc0(self, N0, N1, p, Nb, genT, kappa, season):
         """
         Calculate the effective population size (Ne). 
         intput:
@@ -757,6 +756,6 @@ class Hatchery3_2_2:
                 #Neh = np.maximum(mu_k*(2*Nb - 1)/4, 0) # variance effective population size of hatchery population
                 Neh = Nb
                 # apply Ryman-Laikre effect to calculate effective population size
-                Ne = 1/(x**2/Neh + (1-x)**2/(New))
+                Ne = np.array([1/(x**2/Neh + (1-x)**2/(New))])
             return Ne, Neh, New
 

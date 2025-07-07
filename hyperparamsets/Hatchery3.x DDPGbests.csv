@@ -23,11 +23,11 @@ buffer_size,100000,100000
 batch_size,64,64
 tau,0.01,0.01
 performance_sampleN,100,10
-parallel_testing,1,1
-evaluation_interval,800,10
+parallel_testing,0,0
+evaluation_interval,1000,10
 standardize,0,0
 max_steps,25,25
-episodenum,3000,100
+episodenum,5000,100
 envid,Hatchery3.2.2,Hatchery3.2.2
 envconfig,"{'init':None,'paramset':1,'discretization':-1,'LC':1}","{'init':None,'paramset':1,'discretization':-1,'LC':1}"
 seed,111,542178

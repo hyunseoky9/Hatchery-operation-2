@@ -5,7 +5,7 @@ import numpy as np
 class Actor(nn.Module):
     """Actor (Policy) Model."""
 
-    def __init__(self, state_size, action_size, hidden_size, hidden_num, lrdecayrate, learning_rate):
+    def __init__(self, state_size, action_size, hidden_size, hidden_num, lrdecayrate, learning_rate, fstack):
         """Initialize parameters and build model.
 
         Params
@@ -20,6 +20,7 @@ class Actor(nn.Module):
         self.action_size = action_size
         self.hidden_size = hidden_size if isinstance(hidden_size, list) else np.ones(hidden_num)*hidden_size
         self.hidden_num = hidden_num
+        self.fstack = fstack
 
         # build the model
         layers = [nn.Linear(self.state_size, self.hidden_size[0]), nn.ReLU()]

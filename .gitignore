@@ -10,6 +10,7 @@ td results/
 value iter results/
 deepQN results/
 DDPG results/
+TD3 results/
 DRQN results/
 a3c results/
 rayrllib results/

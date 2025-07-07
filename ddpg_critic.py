@@ -8,7 +8,7 @@ import numpy as np
 class Critic(nn.Module):
     """Critic (Value) Model."""
 
-    def __init__(self, state_size, action_size, state_hidden_size, state_hidden_num, action_hidden_size, action_hidden_num, trunk_hidden_size, trunk_hidden_num, lrdecayrate, learning_rate):
+    def __init__(self, state_size, action_size, state_hidden_size, state_hidden_num, action_hidden_size, action_hidden_num, trunk_hidden_size, trunk_hidden_num, lrdecayrate, learning_rate,fstack):
         """Initialize parameters and build model.
 
         Params
@@ -27,6 +27,7 @@ class Critic(nn.Module):
         self.trunk_hidden_num = trunk_hidden_num
         self.learning_rate = learning_rate
         self.lrdecayrate = lrdecayrate
+        self.fstack = fstack
 
         # Build the model
         # state layers 
