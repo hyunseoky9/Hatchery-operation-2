@@ -212,13 +212,6 @@ class TD3():
         states, actions, rewards, dones, next_states = (
             tensor.to(self.device) for tensor in experiences
         )
-        #device = self.device                        # e.g. torch.device("cuda")        
-        # Convert experience tuples to separate arrays for each element (states, actions, rewards, etc.)
-        #states      = torch.as_tensor(np.vstack([e.state for e in experiences]),dtype=torch.float32, device=device)
-        #actions     = torch.as_tensor(np.vstack([e.action for e in experiences]),dtype=torch.float32, device=device)
-        #rewards     = torch.as_tensor(np.vstack([e.reward for e in experiences]),dtype=torch.float32, device=device)
-        #dones       = torch.as_tensor(np.vstack([e.done for e in experiences]),dtype=torch.float32, device=device)      # or dtype=torch.bool
-        #next_states = torch.as_tensor(np.vstack([e.next_state for e in experiences]),dtype=torch.float32, device=device)
 
         # critic target 
         with torch.no_grad():
