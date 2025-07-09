@@ -85,7 +85,10 @@ class DDPG():
         ## Noise process
         self.exploration_mu = float(paramdf['exploration_mu'])
         self.exploration_theta = float(paramdf['exploration_theta'])
-        self.exploration_sigma = float(paramdf['exploration_sigma'])
+        self.exploration_sigma_start = float(paramdf['exploration_sigma_start'])
+        self.exploration_sigma_end = float(paramdf['exploration_sigma_end']) # determines at what percentage of the total training episodes the exploration noise hits the end value. 
+        self.exploration_decay_fraction = float(paramdf['exploration_decay_fraction'])
+
 
         ## Replay buffer memory parameters
         self.buffer_size = int(paramdf['buffer_size'])  # size of the replay buffer
@@ -117,7 +120,7 @@ class DDPG():
         print(f"critic lr: {self.critic_lr}, critic lr decay rate: {self.critic_lrdecayrate}, critic min lr: {self.critic_min_lr}")
         print(f"critic weight decay: {self.critic_weight_decay}")
         print(f"standardize: {self.standardize}")
-        print(f"exploration: mu: {self.exploration_mu}, theta: {self.exploration_theta}, sigma: {self.exploration_sigma}")
+        print(f"exploration: mu: {self.exploration_mu}, theta: {self.exploration_theta},\n sigma (start): {self.exploration_sigma_start}, sigma (end): {self.exploration_sigma_end}, decay fraction: {self.exploration_decay_fraction}")
         print(f"buffer size: {self.buffer_size}, batch size: {self.batch_size}")
         print(f"gamma: {self.gamma}, tau: {self.tau}")
         print(f"fstack: {self.fstack}")
@@ -162,7 +165,8 @@ class DDPG():
         #self.rms = RunningMeanStd(len(env.obsspace_dim), self.max_steps) if self.standardize else None
 
         ## Noise process
-        self.noise = OUNoise(self.action_size, self.exploration_mu, self.exploration_theta, self.exploration_sigma)
+        self.exploration_decay_steps = int(self.exploration_decay_fraction * self.episodenum)
+        self.noise = OUNoise(self.action_size, self.exploration_mu, self.exploration_theta, self.exploration_sigma_start)
 
         ## Replay memory
         self.memory = ReplayBuffer(self.buffer_size, self.batch_size)
@@ -277,6 +281,9 @@ class DDPG():
                 actor_current_lr = self.actor_opt.param_groups[0]['lr']
                 print(f"Episode {i_episode}, Learning Rate: A{actor_current_lr}/C{critic_current_lr} Avg Performance: {inttestscore:.2f}")
                 print('-----------------------------------')        
+            # decay the exploration noise sigma
+            self.noise.sigma = max(self.exploration_sigma_end,self.exploration_sigma_start - (self.exploration_sigma_start - self.exploration_sigma_end) *(i_episode+1) / self.exploration_decay_steps) 
+
 
         print('calculating the average reward with the final Q network')
         if self.parallel_testing:
