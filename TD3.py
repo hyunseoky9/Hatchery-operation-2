@@ -1,5 +1,6 @@
 import shutil
 from ddpg_critic import Critic
+from ddpg_critic2 import Critic2
 from OUNoise import OUNoise
 from ReplayBuffer import ReplayBuffer
 import random
@@ -63,7 +64,7 @@ class TD3():
         self.critic_trunk_hidden_size = eval(paramdf['critic_trunk_hidden_size'])
 
         ## TD3 parameters
-        self.policy_delay = int(paramdf['policy_delay'])  # delay term "d" for policy updates
+        self.policy_delay = int(paramdf['policy_delay'])  # delay term "d" for policy updates. Actor and target networks are updated every d steps.
         self.target_noise = float(paramdf['target_noise'])  # noise for target policy smoothing (standard deviation of Gaussian noise)
         self.target_noise_clip = float(paramdf['target_noise_clip']) # noise clipping for target policy smoothing
 
@@ -138,12 +139,20 @@ class TD3():
         self.actor_target  = copy.deepcopy(self.actor_local).to(self.device)
 
         ## Critic (Value) Model
-        self.critic1_local = Critic(self.state_size*self.fstack, self.action_size, self.critic_state_hidden_size, self.critic_state_hidden_num,
-                                    self.critic_action_hidden_size, self.critic_action_hidden_num, self.critic_trunk_hidden_size,
-                                    self.critic_trunk_hidden_num, self.critic_lrdecayrate, self.critic_lr, self.fstack).to(self.device)
-        self.critic2_local = Critic(self.state_size*self.fstack, self.action_size, self.critic_state_hidden_size, self.critic_state_hidden_num,
-                                    self.critic_action_hidden_size, self.critic_action_hidden_num, self.critic_trunk_hidden_size,
-                                    self.critic_trunk_hidden_num, self.critic_lrdecayrate, self.critic_lr, self.fstack).to(self.device)
+        if self.critic_state_hidden_num == 0:
+            self.critic1_local = Critic2(self.state_size*self.fstack, self.action_size, self.critic_state_hidden_size, self.critic_state_hidden_num,
+                                        self.critic_action_hidden_size, self.critic_action_hidden_num, self.critic_trunk_hidden_size,
+                                        self.critic_trunk_hidden_num, self.critic_lrdecayrate, self.critic_lr, self.fstack).to(self.device)
+            self.critic2_local = Critic2(self.state_size*self.fstack, self.action_size, self.critic_state_hidden_size, self.critic_state_hidden_num,
+                                        self.critic_action_hidden_size, self.critic_action_hidden_num, self.critic_trunk_hidden_size,
+                                        self.critic_trunk_hidden_num, self.critic_lrdecayrate, self.critic_lr, self.fstack).to(self.device)
+        else:
+            self.critic1_local = Critic(self.state_size*self.fstack, self.action_size, self.critic_state_hidden_size, self.critic_state_hidden_num,
+                                        self.critic_action_hidden_size, self.critic_action_hidden_num, self.critic_trunk_hidden_size,
+                                        self.critic_trunk_hidden_num, self.critic_lrdecayrate, self.critic_lr, self.fstack).to(self.device)
+            self.critic2_local = Critic(self.state_size*self.fstack, self.action_size, self.critic_state_hidden_size, self.critic_state_hidden_num,
+                                        self.critic_action_hidden_size, self.critic_action_hidden_num, self.critic_trunk_hidden_size,
+                                        self.critic_trunk_hidden_num, self.critic_lrdecayrate, self.critic_lr, self.fstack).to(self.device)
         self.critic1_target = copy.deepcopy(self.critic1_local).to(self.device)
         self.critic2_target = copy.deepcopy(self.critic2_local).to(self.device)
 
@@ -279,7 +288,6 @@ class TD3():
             for t in range(max_t):
                 action = self.actor_local.act(state,self.noise)  # get action from actor (with noise for exploration)
                 next_state, reward, done, _ = self.env.step(action)  # step in the env
-                next_state = self.rms.normalize(next_state) if self.standardize else next_state # standardize
                 if self.standardize: # standardize
                     self.rms.stored_batch.append(next_state) # store the state for running mean std calculation
                     next_state = self.rms.normalize(next_state)

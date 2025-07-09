@@ -244,7 +244,6 @@ class DDPG():
             for t in range(max_t):
                 action = self.actor_local.act(state,self.noise)  # get action from actor (with noise for exploration)
                 next_state, reward, done, _ = self.env.step(action)  # step in the env
-                next_state = self.rms.normalize(next_state) if self.standardize else next_state # standardize
                 if self.standardize: # standardize
                     self.rms.stored_batch.append(next_state) # store the state for running mean std calculation
                     next_state = self.rms.normalize(next_state)

@@ -7,9 +7,13 @@ class FixedMeanStd:
         6.34880387, 20.10945595, 10.78685875])
             self.var = np.array([2.22852155, 3.25747513, 3.32704338, 1.79404018, 2.40663774,
        2.78347831, 0.39975523, 1.44030081])**2
+        self.stored_batch = []
+        self.rolloutnum = 0
+        self.updateN = 1000 # Number of samples to collect before updating the mean and variance
 
     def update(self):
-        pass
+        self.stored_batch = []
+        self.rolloutnum = 0
 
     def normalize(self, x):
         return list((x - self.mean) / np.sqrt(self.var + 1e-8))

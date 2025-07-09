@@ -300,7 +300,7 @@ class Hatchery3_2_2:
         totN1 = np.sum(N1)
         a = a[0:self.n_reach] # only take the first n_reach elements of the action vector
         totpop = totN0 + totN1
-        if (N0+N1)[1] >= 0: #self.Nth: #all((N0 + N1) >= self.Nth):
+        if all((N0 + N1) >= self.Nth): #(N0+N1)[1] >= 0:#self.Nth: #all((N0 + N1) >= self.Nth):
             # demographic stuff (stocking and winter survival)
             Mw = np.exp(np.random.normal(self.lMwmu, self.lMwsd))
             stockedNsurvived = a*self.maxcap*self.irphi
@@ -335,7 +335,7 @@ class Hatchery3_2_2:
             Ne_next, _, _ = self.NeCalc0(N0,N1,p,self.Nb,genT,kappa,0)
             extra_info['Ne'] = Ne_next # Ne_wild is the Ne until you stock in the next fall.
             # reward & done
-            reward = 1 + (np.log(Ne_score)[0] - np.log(Ne_base)) #self.extant +  #self.extant*(1/(1+np.exp(-0.001*(np.sum(N0+N1) - (np.log(1/0.01 - 1)/0.001) + self.Nth)))) # 0.001 = k, 0.01 = percentage of self.extant at Nth
+            reward = 1 #1 + (np.log(Ne_score)[0] - np.log(Ne_base)) #self.extant +  #self.extant*(1/(1+np.exp(-0.001*(np.sum(N0+N1) - (np.log(1/0.01 - 1)/0.001) + self.Nth)))) # 0.001 = k, 0.01 = percentage of self.extant at Nth
             done = False
 
             # update state & obs
