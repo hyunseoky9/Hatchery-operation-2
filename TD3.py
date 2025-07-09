@@ -200,7 +200,7 @@ class TD3():
 
         # Learn, if enough samples are available in memory
         if len(self.memory) > self.batch_size:
-            experiences = self.memory.sample(self.batch_size)
+            experiences = self.memory.sample()
             self.learn(experiences)
 
         # Roll over last state and action
@@ -208,14 +208,17 @@ class TD3():
 
     def learn(self, experiences):
         """Update policy and value parameters using given batch of experience tuples."""
-        device = self.device                        # e.g. torch.device("cuda")
 
+        states, actions, rewards, dones, next_states = (
+            tensor.to(self.device) for tensor in experiences
+        )
+        #device = self.device                        # e.g. torch.device("cuda")        
         # Convert experience tuples to separate arrays for each element (states, actions, rewards, etc.)
-        states      = torch.as_tensor(np.vstack([e.state for e in experiences]),dtype=torch.float32, device=device)
-        actions     = torch.as_tensor(np.vstack([e.action for e in experiences]),dtype=torch.float32, device=device)
-        rewards     = torch.as_tensor(np.vstack([e.reward for e in experiences]),dtype=torch.float32, device=device)
-        dones       = torch.as_tensor(np.vstack([e.done for e in experiences]),dtype=torch.float32, device=device)      # or dtype=torch.bool
-        next_states = torch.as_tensor(np.vstack([e.next_state for e in experiences]),dtype=torch.float32, device=device)
+        #states      = torch.as_tensor(np.vstack([e.state for e in experiences]),dtype=torch.float32, device=device)
+        #actions     = torch.as_tensor(np.vstack([e.action for e in experiences]),dtype=torch.float32, device=device)
+        #rewards     = torch.as_tensor(np.vstack([e.reward for e in experiences]),dtype=torch.float32, device=device)
+        #dones       = torch.as_tensor(np.vstack([e.done for e in experiences]),dtype=torch.float32, device=device)      # or dtype=torch.bool
+        #next_states = torch.as_tensor(np.vstack([e.next_state for e in experiences]),dtype=torch.float32, device=device)
 
         # critic target 
         with torch.no_grad():

@@ -1,5 +1,6 @@
 import shutil
 from ddpg_critic import Critic
+from ddpg_critic2 import Critic2
 from OUNoise import OUNoise
 from ReplayBuffer import ReplayBuffer
 import random
@@ -132,9 +133,14 @@ class DDPG():
         self.actor_target  = copy.deepcopy(self.actor_local).to(self.device)   # fast one-liner
 
         ## Critic (Value) Model
-        self.critic_local = Critic(self.state_size*self.fstack, self.action_size, self.critic_state_hidden_size, self.critic_state_hidden_num,
-                                    self.critic_action_hidden_size, self.critic_action_hidden_num, self.critic_trunk_hidden_size,
-                                    self.critic_trunk_hidden_num, self.critic_lrdecayrate, self.critic_lr, self.fstack).to(self.device)
+        if self.critic_state_hidden_num == 0:
+            self.critic_local = Critic2(self.state_size*self.fstack, self.action_size, self.critic_state_hidden_size, self.critic_state_hidden_num,
+                                        self.critic_action_hidden_size, self.critic_action_hidden_num, self.critic_trunk_hidden_size,
+                                        self.critic_trunk_hidden_num, self.critic_lrdecayrate, self.critic_lr, self.fstack).to(self.device)
+        else:
+            self.critic1_local = Critic(self.state_size*self.fstack, self.action_size, self.critic_state_hidden_size, self.critic_state_hidden_num,
+                                        self.critic_action_hidden_size, self.critic_action_hidden_num, self.critic_trunk_hidden_size,
+                                        self.critic_trunk_hidden_num, self.critic_lrdecayrate, self.critic_lr, self.fstack).to(self.device)
         self.critic_target = copy.deepcopy(self.critic_local).to(self.device)
 
         ## Optimizers
