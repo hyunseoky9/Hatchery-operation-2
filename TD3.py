@@ -54,14 +54,14 @@ class TD3():
         self.state_size = len(env.obsspace_dim)
         self.action_size = len(env.actionspace_dim)
 
-        self.actor_hidden_num = int(paramdf['actor_hidden_num'])
-        self.actor_hidden_size = eval(paramdf['actor_hidden_size'])
-        self.critic_action_hidden_num = int(paramdf['critic_action_hidden_num'])
-        self.critic_action_hidden_size = eval(paramdf['critic_action_hidden_size'])
-        self.critic_state_hidden_num = int(paramdf['critic_state_hidden_num'])
-        self.critic_state_hidden_size = eval(paramdf['critic_state_hidden_size'])
-        self.critic_trunk_hidden_num = int(paramdf['critic_trunk_hidden_num'])
-        self.critic_trunk_hidden_size = eval(paramdf['critic_trunk_hidden_size'])
+        self.actor_hidden_num = int(paramdf['actor_hidden_num']) # number of hidden layers in the actor network
+        self.actor_hidden_size = eval(paramdf['actor_hidden_size']) # size of hidden layers in the actor network
+        self.critic_action_hidden_num = int(paramdf['critic_action_hidden_num']) # number of hidden layers in the critic network for action
+        self.critic_action_hidden_size = eval(paramdf['critic_action_hidden_size']) # size of hidden layers in the critic network for action
+        self.critic_state_hidden_num = int(paramdf['critic_state_hidden_num']) # number of hidden layers in the critic network for state
+        self.critic_state_hidden_size = eval(paramdf['critic_state_hidden_size']) # size of hidden layers in the critic network for state
+        self.critic_trunk_hidden_num = int(paramdf['critic_trunk_hidden_num']) # number of hidden layers in the critic network for trunk
+        self.critic_trunk_hidden_size = eval(paramdf['critic_trunk_hidden_size']) # size of hidden layers in the critic network for trunk
 
         ## TD3 parameters
         self.policy_delay = int(paramdf['policy_delay'])  # delay term "d" for policy updates. Actor and target networks are updated every d steps.
@@ -69,29 +69,29 @@ class TD3():
         self.target_noise_clip = float(paramdf['target_noise_clip']) # noise clipping for target policy smoothing
 
         ## Learning rate
-        self.actor_lr = float(paramdf['actor_lr'])
-        self.critic_lr = float(paramdf['critic_lr'])
-        self.actor_lrdecayrate = float(paramdf['actor_lrdecay'])
-        self.critic_lrdecayrate = float(paramdf['critic_lrdecay'])
+        self.actor_lr = float(paramdf['actor_lr']) # learning rate for actor network
+        self.critic_lr = float(paramdf['critic_lr']) # learning rate for critic network
+        self.actor_lrdecayrate = float(paramdf['actor_lrdecay']) # learning rate decay rate for actor network
+        self.critic_lrdecayrate = float(paramdf['critic_lrdecay']) # learning rate decay rate for critic network
         if paramdf['actor_minlr'] == 'inf':
-            self.actor_min_lr = float('-inf')
+            self.actor_min_lr = float('-inf') # minimum learning rate for actor network
         else:
             self.actor_min_lr = float(paramdf['actor_minlr'])
         if paramdf['critic_minlr'] == 'inf':
-            self.critic_min_lr = float('-inf')
+            self.critic_min_lr = float('-inf') # minimum learning rate for critic network
         else:
             self.critic_min_lr = float(paramdf['critic_minlr'])
         ## weight decay
-        self.critic_weight_decay = float(paramdf['critic_weight_decay'])
+        self.critic_weight_decay = float(paramdf['critic_weight_decay']) # weight decay for critic network
 
         ## standardize
-        self.standardize = bool(int(paramdf['standardize']))
+        self.standardize = bool(int(paramdf['standardize'])) # whether to standardize the input states or not
 
         ## Noise process
-        self.exploration_mu = float(paramdf['exploration_mu'])
-        self.exploration_theta = float(paramdf['exploration_theta'])
-        self.exploration_sigma_start = float(paramdf['exploration_sigma_start'])
-        self.exploration_sigma_end = float(paramdf['exploration_sigma_end'])
+        self.exploration_mu = float(paramdf['exploration_mu']) # mean of the exploration noise
+        self.exploration_theta = float(paramdf['exploration_theta']) # theta of the exploration noise (controls the rate of mean reversion)
+        self.exploration_sigma_start = float(paramdf['exploration_sigma_start']) # initial standard deviation of the exploration noise
+        self.exploration_sigma_end = float(paramdf['exploration_sigma_end']) # final standard deviation of the exploration noise
         self.exploration_decay_fraction = float(paramdf['exploration_decay_fraction']) # determines at what percentage of the total training episodes the exploration noise hits the end value. 
 
         ## Replay buffer memory parameters
@@ -101,15 +101,15 @@ class TD3():
         ## Algorithm parameters
         self.gamma = env.gamma  # discount factor
         self.tau = float(paramdf['tau'])  # for soft update of target parameters
-        self.fstack = int(paramdf['framestacking'])# framestacking
+        self.fstack = int(paramdf['framestacking']) # number of frames to stack for the state input
 
         ## Evaluation parameters
-        self.evaluation_interval = int(paramdf['evaluation_interval'])
-        self.performance_sampleN = int(paramdf['performance_sampleN'])
-        self.parallel_testing = bool(int(paramdf['parallel_testing']))  # whether to use parallel testing or not
+        self.evaluation_interval = int(paramdf['evaluation_interval']) # how often to evaluate the agent (in episodes)
+        self.performance_sampleN = int(paramdf['performance_sampleN']) # number of samples to use for performance evaluation
+        self.parallel_testing = bool(int(paramdf['parallel_testing'])) # whether to use parallel testing or not
         ## Training length parameters
-        self.max_steps = int(paramdf['max_steps'])
-        self.episodenum = int(paramdf['episodenum'])
+        self.max_steps = int(paramdf['max_steps']) # maximum number of steps per episode
+        self.episodenum = int(paramdf['episodenum']) # total number of episodes to train the agent
 
         # print out the parameters
         print(f'paramID: {self.paramid}, iteration: {self.iteration}, seed: {self.seed}')

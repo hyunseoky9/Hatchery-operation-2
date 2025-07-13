@@ -84,6 +84,7 @@ class Hatchery3_2_2:
         self.prodcost = paramdf['prodcost'][self.parset] # production cost in spring if deciding to produce
         self.unitcost = paramdf['unitcost'][self.parset] # unit production cost.
         self.maxcap = paramdf['maxcap'][self.parset] # maximum carrying capacity of the hatchery
+        self.Ne2Nratio = paramdf['Ne2Nratio'][self.parset] # ratio of effective population size to total population size in hatchery
         # for monitoring simulation (alternate parameterization for )
         self.sampler = self.sz
         
@@ -157,8 +158,9 @@ class Hatchery3_2_2:
         self.avgsa = np.sum(self.sa * self.combo_delfallprob)
         self.AVGage_of_age2plus = 2*(1/(1+self.avgsa)) + 3*(self.avgsa/(1+self.avgsa)) # assume that the fish only lives till age 3
         
-        # number of broodstock used for producing maximum capacity. Assumes maximum capacity is produced every year. 
-        self.Nb = 2*self.maxcap/self.fc[1]
+        # number of broodstock used for producing maximum capacity. Assumes maximum capacity is produced every year.
+        self.Nb = 2*self.maxcap/1000 # the value 1000 is Thomas' ballpark estimate of stock-ready fish produced per female #  2*self.maxcap/self.fc[1]
+        # the value 1000 is Thomas' ballpark estimate of stock-ready fish produced per female
 
         # range for each variables
         self.N0minmax = [0,1e7] 
@@ -298,12 +300,14 @@ class Hatchery3_2_2:
             Ne = np.array(self.states['Ne'])[np.array(self.state)[self.sidx['Ne']]]
         totN0 = np.sum(N0)
         totN1 = np.sum(N1)
+        Nr = N0 + N1 # population size in each reach
         a = a[0:self.n_reach] # only take the first n_reach elements of the action vector
         totpop = totN0 + totN1
-        if all((N0 + N1) >= self.Nth): #(N0+N1)[1] >= 0:#self.Nth: #all((N0 + N1) >= self.Nth):
+        if  totpop > self.Nth: #all((N0 + N1) >= self.Nth): #all((N0 + N1) >= self.Nth): #(N0+N1)[1] >= 0:#self.Nth: #all((N0 + N1) >= self.Nth): # totpop > self.Nth:
             # demographic stuff (stocking and winter survival)
             Mw = np.exp(np.random.normal(self.lMwmu, self.lMwsd))
             stockedNsurvived = a*self.maxcap*self.irphi
+            N0CF = N0.copy()*np.exp(-150*Mw) # counterfactual N0, if no stocking had been done
             N0 = N0 + stockedNsurvived # stocking san acacia (t=3) in the fall
             N0 = np.minimum(N0*np.exp(-150*Mw),np.ones(self.n_reach)*self.N0minmax[1]) # stocking san acacia (t=3) in the fall
             N1 = N1*np.exp(-150*Mw)
@@ -332,10 +336,18 @@ class Hatchery3_2_2:
             q_next, _ = self.flowmodel.nextflowNforecast(q) # springflow and forecast in spring
             q_next = q_next[0][0]
             # Ne calculation
+            Ne_CF, _, _ = self.NeCalc0(N0CF,N1,p,self.Nb,genT,kappa,0) # Ne if no stocking had been done
             Ne_next, _, _ = self.NeCalc0(N0,N1,p,self.Nb,genT,kappa,0)
             extra_info['Ne'] = Ne_next # Ne_wild is the Ne until you stock in the next fall.
+            #extra_info['Ne_imp'] = ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])) # Ne_CF is the Ne if no stocking had been done.
+            #if ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])) >=0:
+            #    print(f'negative impact on Ne smaller than positive impact on Ne: {(np.log(Ne_score)[0] - np.log(Ne_base) + np.log(Ne_next)[0] - np.log(Ne_CF)[0]):.3f}')
+            #else:
+            #    print(f'negative impact on Ne larger than positive impact on Ne: {(np.log(Ne_score)[0] - np.log(Ne_base) + np.log(Ne_next)[0] - np.log(Ne_CF)[0]):.3f}')
             # reward & done
-            reward = 1 #1 + (np.log(Ne_score)[0] - np.log(Ne_base)) #self.extant +  #self.extant*(1/(1+np.exp(-0.001*(np.sum(N0+N1) - (np.log(1/0.01 - 1)/0.001) + self.Nth)))) # 0.001 = k, 0.01 = percentage of self.extant at Nth
+            Nth_local = self.Nth/2
+            c = 1
+            reward = np.sum(c/3*((Nr>Nth_local).astype(int))) + ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])) # np.log(np.sum(N0_next+N1_next)) #1 + ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0]))  #100 + np.log(Ne_score)[0]   #self.extant +  #self.extant*(1/(1+np.exp(-0.001*(np.sum(N0+N1) - (np.log(1/0.01 - 1)/0.001) + self.Nth)))) # 0.001 = k, 0.01 = percentage of self.extant at Nth
             done = False
 
             # update state & obs
@@ -723,8 +735,8 @@ class Hatchery3_2_2:
             # calculate wild population's Ne
             totN0, totN1  = N0.sum(), N1.sum()
             effspawner    = N0 + self.beta_2*N1                      # (3,)
-            alph             = self.alpha_vec[:,None,None]              # (nα,1,1)
-            kappa             = self.kappa_exp.T[None,:,:]               # (1,3,nκ)
+            alph          = self.alpha_vec[:,None,None]              # (nα,1,1)
+            kappa         = self.kappa_exp.T[None,:,:]               # (1,3,nκ)
             denom         = 1 + alph*effspawner[:,None]/kappa               # (nα,3,nκ)
             f1            = (alph*N0[:,None]/denom).sum(1)/totN0        # (nα,nκ)
             fa            = (alph*self.beta_2*N1[:,None]/denom).sum(1)/totN1
@@ -745,8 +757,8 @@ class Hatchery3_2_2:
                 Ne = np.array([New])
                 Neh = np.array([0])
             else:
-                stocked_cont = np.sum(p)
-                total_cont = np.sum(N0)
+                stocked_cont = np.sum(p) # stocked contribution
+                total_cont = np.sum(N0) # wild contribution
                 x = stocked_cont/(total_cont + stocked_cont)
                 #effspawner = N0 + self.beta_2*N1 # effective number of spawners
                 #stocked_cont = np.sum((self.alpha*p)/(1 + self.alpha*effspawner/kappa)) # stocked fish contribution
@@ -754,7 +766,7 @@ class Hatchery3_2_2:
                 #x = stocked_cont/(total_cont)
                 #mu_k = self.fc[1]*self.irphi*np.exp(-150*np.prod(np.exp(self.lMwmu))**(1/3))
                 #Neh = np.maximum(mu_k*(2*Nb - 1)/4, 0) # variance effective population size of hatchery population
-                Neh = Nb
+                Neh = Nb * self.Ne2Nratio
                 # apply Ryman-Laikre effect to calculate effective population size
                 Ne = np.array([1/(x**2/Neh + (1-x)**2/(New))])
             return Ne, Neh, New

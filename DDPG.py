@@ -141,7 +141,7 @@ class DDPG():
                                         self.critic_action_hidden_size, self.critic_action_hidden_num, self.critic_trunk_hidden_size,
                                         self.critic_trunk_hidden_num, self.critic_lrdecayrate, self.critic_lr, self.fstack).to(self.device)
         else:
-            self.critic1_local = Critic(self.state_size*self.fstack, self.action_size, self.critic_state_hidden_size, self.critic_state_hidden_num,
+            self.critic_local = Critic(self.state_size*self.fstack, self.action_size, self.critic_state_hidden_size, self.critic_state_hidden_num,
                                         self.critic_action_hidden_size, self.critic_action_hidden_num, self.critic_trunk_hidden_size,
                                         self.critic_trunk_hidden_num, self.critic_lrdecayrate, self.critic_lr, self.fstack).to(self.device)
         self.critic_target = copy.deepcopy(self.critic_local).to(self.device)

@@ -83,6 +83,7 @@ class Hatchery3_2:
         self.extant = paramdf['extant'][self.parset] # reward for not being
         self.prodcost = paramdf['prodcost'][self.parset] # production cost in spring if deciding to produce
         self.unitcost = paramdf['unitcost'][self.parset] # unit production cost.
+        self.Ne2Nratio = paramdf['Ne2Nratio'][self.parset] # ratio of effective population size to total population size in hatchery
         # for monitoring simulation (alternate parameterization for )
         self.sampler = self.sz
         
@@ -423,6 +424,7 @@ class Hatchery3_2:
         t_next = t + 1 if t < 3 else np.zeros(1).astype(int)
         totN0 = np.sum(N0)
         totN1 = np.sum(N1)
+        Nr = N0 + N1 # population size in each reach
         totpop = totN0 + totN1
         if t == 1 and totpop/4000 < 0.5:
             foo = 0
@@ -448,7 +450,7 @@ class Hatchery3_2:
                 N1_next = np.minimum((N0+N1)*np.exp(-215*M1)*((1-delfall) + self.tau*delfall + (1 - self.tau)*self.r1*self.phifall),np.ones(self.n_reach)*self.N1minmax[1])
                 # hatchery stuff (Nh, Nc, Nc0)
                 Nh_next = a + 10 # added 10 so that there's no small discrepancy that doesn't allow stocking the produced amount in the fall.
-                Nb_next = 2*a/self.fc[1] # number of broodstock needed to produce 'a' fish self.fc[1]=number of fish produced per age 2 female broodstock, which is multiplied by 2 b/c you need male and female.
+                Nb_next = 2*a/1000 # the value 1000 is Thomas' ballpark estimate of stock-ready fish produced per female  # 2*a/self.fc[1] # number of broodstock needed to produce 'a' fish self.fc[1]=number of fish produced per age 2 female broodstock, which is multiplied by 2 b/c you need male and female.
                 p_next = np.zeros(self.n_reach)
                 # hydrological stuff. No springflow in fall (stays the same)
                 Ne_next, Neh, New = self.NeCalc0(N0,N1,p,Nb,genT,0)
@@ -953,7 +955,7 @@ class Hatchery3_2:
                 #x = stocked_cont/(total_cont)
                 #mu_k = self.fc[1]*self.irphi*np.exp(-150*np.prod(np.exp(self.lMwmu))**(1/3))
                 #Neh = np.maximum(mu_k*(2*Nb - 1)/4, 0) # variance effective population size of hatchery population
-                Neh = Nb
+                Neh = Nb * self.Ne2Nratio
                 # apply Ryman-Laikre effect to calculate effective population size
                 Ne = 1/(x**2/Neh + (1-x)**2/(New))
             return Ne, Neh, New

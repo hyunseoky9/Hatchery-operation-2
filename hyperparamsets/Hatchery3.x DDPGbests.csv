@@ -18,7 +18,9 @@ critic_trunk_hidden_size,10,10
 critic_weight_decay,0.01,0.01
 exploration_mu,0,0
 exploration_theta,0.15,0.15
-exploration_sigma,0.2,0.2
+exploration_sigma_start,0.2,0.2
+exploration_sigma_end,0.2,0.2
+exploration_decay_fraction,0.3,0.3
 buffer_size,100000,100000
 batch_size,64,64
 tau,0.01,0.01
