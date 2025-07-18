@@ -424,7 +424,6 @@ class Hatchery3_2:
         t_next = t + 1 if t < 3 else np.zeros(1).astype(int)
         totN0 = np.sum(N0)
         totN1 = np.sum(N1)
-        Nr = N0 + N1 # population size in each reach
         totpop = totN0 + totN1
         if t == 1 and totpop/4000 < 0.5:
             foo = 0
