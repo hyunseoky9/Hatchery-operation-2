@@ -79,7 +79,11 @@ class Hatchery3_2_2:
         self.eggcollection_max = paramdf['eggcollection_max'][self.parset] # maximum number of eggs that can be collected 
         self.larvaecollection_max = paramdf['larvaecollection_max'][self.parset] # maximum number of larvae that can be collected 
         self.sc = np.array([paramdf['s1'][self.parset],paramdf['s2'][self.parset],paramdf['s3'][self.parset]]) # cohort survival rate by age group
-        self.Nth = paramdf['Nth'][self.parset]
+        self.Nth = 1000 #paramdf['Nth'][self.parset]
+        self.Nth_local = 1000
+        self.c = 3
+        self.objective_type = 'soft focus on each reach'
+        print(f'Nth: {self.Nth}, Nth_local: {self.Nth_local}, c: {self.c}, objective_type: {self.objective_type}')
         self.extant = paramdf['extant'][self.parset] # reward for not being
         self.prodcost = paramdf['prodcost'][self.parset] # production cost in spring if deciding to produce
         self.unitcost = paramdf['unitcost'][self.parset] # unit production cost.
@@ -257,18 +261,18 @@ class Hatchery3_2_2:
             new_state.append(N0val) # don't start from the smallest population size
             new_obs.append(N0val)
         else:
-            new_state.append(initstate[0])
-            new_obs.append(initstate[0])
+            new_state.append(np.array([initstate[0]]))
+            new_obs.append(np.array([initstate[0]]))
         # N1 & ON1
         if initstate[1] == -1:
             # N1val = random.choices(list(np.arange(1, len(self.states['N1']))), k = self.statevar_dim[1])
             new_state.append(N1val) # don't start from
             new_obs.append(N1val)
         else:
-            new_state.append(initstate[1])
-            new_obs.append(initstate[1])
+            new_state.append(np.array([initstate[1]]))
+            new_obs.append(np.array([initstate[1]]))
         # q & qhat
-        if initstate[3] == -1:
+        if initstate[2] == -1:
             if self.discset == -1:
                 qval = np.random.uniform(size=1)*(self.states['logq'][1] - self.states['logq'][0]) + self.states['logq'][0]
             else:
@@ -276,8 +280,8 @@ class Hatchery3_2_2:
             new_state.append(qval)
             new_obs.append(qval)
         else:
-            new_state.append(initstate[2])
-            new_obs.append(initstate[2])
+            new_state.append(np.array([initstate[2]]))
+            new_obs.append(np.array([initstate[2]]))
         # Ne & ONe
         if self.discset == -1:
             Neval = np.array([np.sum(np.exp(N0val)-1 + np.exp(N1val)-1)*0.6])
@@ -319,7 +323,7 @@ class Hatchery3_2_2:
             extra_info['current_strat_action'] = a
         a = a[0:self.n_reach] # only take the first n_reach elements of the action vector
         totpop = totN0 + totN1
-        if  totpop >= 4000: #all((N0 + N1) >= self.Nth): #all((N0 + N1) >= self.Nth): #(N0+N1)[1] >= 0:#self.Nth: #all((N0 + N1) >= self.Nth): # totpop > self.Nth:
+        if all((N0 + N1) >= self.Nth): #all((N0 + N1) >= self.Nth): #all((N0 + N1) >= self.Nth): #(N0+N1)[1] >= 0:#self.Nth: #all((N0 + N1) >= self.Nth): # totpop > self.Nth:
             # demographic stuff (stocking and winter survival)
             Mw = np.exp(np.random.normal(self.lMwmu, self.lMwsd))
             stockedNsurvived = a*self.maxcap*self.irphi
@@ -368,9 +372,8 @@ class Hatchery3_2_2:
             #else:
             #    print(f'negative impact on Ne larger than positive impact on Ne: {(np.log(Ne_score)[0] - np.log(Ne_base) + np.log(Ne_next)[0] - np.log(Ne_CF)[0]):.3f}')
             # reward & done
-            Nth_local = 1000
-            c = 0
-            reward = np.sum(c/3*((Nr>Nth_local).astype(int))) + ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0]))  #np.sum(c/3*((Nr>Nth_local).astype(int))) + ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])) # np.log(np.sum(N0_next+N1_next)) #1 + ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0]))  #100 + np.log(Ne_score)[0]   #self.extant +  #self.extant*(1/(1+np.exp(-0.001*(np.sum(N0+N1) - (np.log(1/0.01 - 1)/0.001) + self.Nth)))) # 0.001 = k, 0.01 = percentage of self.extant at Nth
+            genetic_reward = ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0]))
+            reward = self.c + genetic_reward #np.sum(self.c/3*((Nr>self.popsize_1cpue).astype(int))) + genetic_reward #self.c + genetic_reward  #np.sum(c/3*((Nr>Nth_local).astype(int))) + ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])) # np.log(np.sum(N0_next+N1_next)) #1 + ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0]))  #100 + np.log(Ne_score)[0]   #self.extant +  #self.extant*(1/(1+np.exp(-0.001*(np.sum(N0+N1) - (np.log(1/0.01 - 1)/0.001) + self.Nth)))) # 0.001 = k, 0.01 = percentage of self.extant at Nth
             done = False
 
             # update state & obs
