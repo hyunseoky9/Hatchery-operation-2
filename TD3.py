@@ -194,7 +194,8 @@ class TD3():
     def reset_episode(self):
         self.noise.reset()
         state, _ = self.env.reset()
-        self.last_state = state*self.fstack
+        state = np.concatenate([self.rms.normalize(self.env.obs)]*self.fstack)
+        self.last_state = state.copy()
         return state
 
     def storeNlearn(self, action, reward, next_state, done):

@@ -77,9 +77,9 @@ def call_env(param):
     elif param['envid'] == 'Hatchery3.2':
         return Hatchery3_2(config['init'], config['paramset'], config['discretization'],config['LC'])
     elif param['envid'] == 'Hatchery3.2.2':
-        return Hatchery3_2_2(config['init'], config['paramset'], config['discretization'],config['LC'])
+        return Hatchery3_2_2(config['init'], config['paramset'], config['discretization'],config['LC'],config['uncertainty'])
     elif param['envid'] == 'Hatchery3.2.3':
-        return Hatchery3_2_3(config['init'], config['paramset'], config['discretization'],config['LC'])
+        return Hatchery3_2_3(config['init'], config['paramset'], config['discretization'],config['LC'], config['uncertainty'])
     elif param['envid'] == 'Tiger':
         return Tiger()
     else:

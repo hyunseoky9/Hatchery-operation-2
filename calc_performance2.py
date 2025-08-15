@@ -27,10 +27,10 @@ def calc_performance(env, device, rms, fstack, policy, episodenum=1000, t_maxste
         t = 0
         while done == False:
             state = rms.normalize(env.obs) if rms is not None else env.obs
-            stack = np.concatenate((stack[len(env.obs):], env.obs))
+            stack = np.concatenate((stack[len(state):], state))
 
             with torch.no_grad():                                   # <– no grads here
-                s = torch.as_tensor(state.copy(), dtype=torch.float32, device=device).unsqueeze(0)
+                s = torch.as_tensor(stack.copy(), dtype=torch.float32, device=device).unsqueeze(0)
                 action = policy(s)
                 action = action.cpu().numpy().squeeze(0)
                 if env.envID in ['Hatchery3.2.2', 'Hatchery3.2.3']:
@@ -44,5 +44,7 @@ def calc_performance(env, device, rms, fstack, policy, episodenum=1000, t_maxste
         avgrewards += rewards
     if env.envID in ['Hatchery3.2.2', 'Hatchery3.2.3']:
         actiondist = actiondist/actiondistcount
+        if actiondist[0] is np.nan:
+            foo = 0
         print(np.round(actiondist,2))
     return avgrewards/episodenum

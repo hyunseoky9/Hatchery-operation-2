@@ -427,7 +427,7 @@ class Hatchery3_2:
         totpop = totN0 + totN1
         if t == 1 and totpop/4000 < 0.5:
             foo = 0
-        if totpop >= self.Nth:
+        if totpop >= 0:#self.Nth:
             if t == 0: # sring
                 # demographic stuff (reproductin and summer survival)
                 delfall = np.concatenate(([self.delfall[0][0]],np.random.beta(self.delfall[0][1:],self.delfall[1][1:])))

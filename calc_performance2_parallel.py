@@ -86,10 +86,10 @@ def worker(policy, workerepisodenum, rms, worker_id, envinit_params, t_maxstep, 
         t = 0
         while done == False:
             state = rms.normalize(env.obs) if rms is not None else env.obs
-            stack = np.concatenate((stack[len(env.obs):], env.obs))
+            stack = np.concatenate((stack[len(state):], state))
 
             with torch.no_grad():                                   # <– no grads here
-                s = torch.as_tensor(state.copy(), dtype=torch.float32, device=device).unsqueeze(0)
+                s = torch.as_tensor(stack.copy(), dtype=torch.float32, device=device).unsqueeze(0)
                 action = policy(s)
                 action = action.cpu().numpy().squeeze(0)
                 if env.envID in ['Hatchery3.2.2', 'Hatchery3.2.3']:

@@ -15,12 +15,20 @@ class Hatchery3_2_2:
     Same as hatchery 3.2, but all the fall actions are taken at once, and spring decision is not taken. It's assumed that maximum capacity is produced every year.
     action is a vector of 4, where the first three are stocking proportions in angostura, isleta, and san acacia, and the last one is the discard proportion.
     """
-    def __init__(self,initstate,parameterization_set,discretization_set,LC_prediction_method):
+    def __init__(self,initstate,parameterization_set,discretization_set,LC_prediction_method, param_uncertainty=0):
+        """
+        initstate: initial state of the environment. If None, it will be initialized to a random state.
+        parameterization_set: index of the parameterization set to use.
+        discretization_set: index of the discretization set to use. -1 means continuous state space.
+        LC_prediction_method: 0 for HMM, 1 for linear GAM.
+        param_uncertainty: if True, the parameters will be sampled from a normal distribution with mean and standard deviation defined in the parameterization set. Makes it POMDP
+        """
         self.envID = 'Hatchery3.2.2'
         self.partial = True
         self.episodic = True
         self.absorbing_cut = True # has an absorbing state and the episode should be cut shortly after reaching it.
         self.discset = discretization_set
+        self.param_uncertainty = param_uncertainty # if 1, parameters will be sampled from the posterior distribution from Yackulic et al. 2023. at every reset.
         self.contstate = False
         self.special_stacking = False
 
@@ -79,10 +87,12 @@ class Hatchery3_2_2:
         self.eggcollection_max = paramdf['eggcollection_max'][self.parset] # maximum number of eggs that can be collected 
         self.larvaecollection_max = paramdf['larvaecollection_max'][self.parset] # maximum number of larvae that can be collected 
         self.sc = np.array([paramdf['s1'][self.parset],paramdf['s2'][self.parset],paramdf['s3'][self.parset]]) # cohort survival rate by age group
+        self.rlen = np.array([paramdf['angolen'][self.parset], paramdf['isllen'][self.parset], paramdf['salen'][self.parset]]) # reach length in km
         self.Nth = 1000 #paramdf['Nth'][self.parset]
-        self.Nth_local = 1000
-        self.c = 3
-        self.objective_type = 'soft focus on each reach'
+        self.dth = 150 # density threshold
+        self.Nth_local = self.rlen* self.dth
+        self.c = 6
+        self.objective_type = 'soft focus 2'
         print(f'Nth: {self.Nth}, Nth_local: {self.Nth_local}, c: {self.c}, objective_type: {self.objective_type}')
         self.extant = paramdf['extant'][self.parset] # reward for not being
         self.prodcost = paramdf['prodcost'][self.parset] # production cost in spring if deciding to produce
@@ -95,6 +105,12 @@ class Hatchery3_2_2:
         # discount factor
         self.gamma = 0.99
 
+        # parameter posterior distribution 
+        if self.param_uncertainty:
+            param_uncertainty_filename = 'uncertain_parameters_posterior_samples4POMDP.csv'
+            self.param_uncertainty_df = pd.read_csv(param_uncertainty_filename)
+            self.paramsampleidx = None # initiate sample idx.
+
         # start springflow simulation model and springflow-to-"Larval carrying capacity" model.
         self.flowmodel = AR1_normalized()
         self.Otowi_minus_ABQ_springflow = self.flowmodel.constants[0] - self.flowmodel.constants[1] # difference between Otowi and ABQ springflow
@@ -106,6 +122,8 @@ class Hatchery3_2_2:
         elif self.LC_prediction_method == 1: # linear GAM
             with open('LC_GAM_ABQ.pkl','rb') as handle:
                 self.LC_ABQ = pickle.load(handle)
+            with open('LC_GAM_Isleta.pkl','rb') as handle:
+                self.LC_IS = pickle.load(handle)
             with open('LC_GAM_San Acacia.pkl','rb') as handle:
                 self.LC_SA = pickle.load(handle)
 
@@ -220,6 +238,7 @@ class Hatchery3_2_2:
             if self.LC_prediction_method == 0:
                 ABQqfrac = (self.ABQq - self.LC_ABQ['springflow'].values[0])/(self.LC_ABQ['springflow'].values[-1] - self.LC_ABQ['springflow'].values[0])
                 SAqfrac = (self.SAq - self.LC_SA['springflow'].values[0])/(self.LC_SA['springflow'].values[-1] - self.LC_SA['springflow'].values[0])
+
                 self.disc_sf_idxs_abq = np.round(ABQqfrac * (len(self.LC_ABQ['springflow']) - 1)).astype(int)
                 self.disc_sf_idxs_sa = np.round(SAqfrac * (len(self.LC_SA['springflow']) - 1)).astype(int)
 
@@ -293,8 +312,14 @@ class Hatchery3_2_2:
         new_state.append(np.log(Neval+1))
         new_obs.append(np.log(Neval+1))
 
+        # sample
+        if self.param_uncertainty:
+            self.paramsampleidx = np.random.randint(0, self.param_uncertainty_df.shape[0]) #np.random.choice([178,3898]) #178 #np.random.randint(0, self.param_uncertainty_df.shape[0])
+            self.parameter_reset() # resample parameters from the posterior distribution
+
         self.state = np.concatenate(new_state)
         self.obs = np.concatenate(new_obs)
+
         return self.obs, self.state
 
     def step(self, a, current_strategy = 0):
@@ -323,9 +348,10 @@ class Hatchery3_2_2:
             extra_info['current_strat_action'] = a
         a = a[0:self.n_reach] # only take the first n_reach elements of the action vector
         totpop = totN0 + totN1
-        if all((N0 + N1) >= self.Nth): #all((N0 + N1) >= self.Nth): #all((N0 + N1) >= self.Nth): #(N0+N1)[1] >= 0:#self.Nth: #all((N0 + N1) >= self.Nth): # totpop > self.Nth:
+
+        if not all(Nr < self.Nth_local): # all(Nr >= self.Nth_local): #all((N0 + N1) >= self.Nth): #all((N0 + N1) >= self.Nth): #all((N0 + N1) >= self.Nth): #(N0+N1)[1] >= 0:#self.Nth: #all((N0 + N1) >= self.Nth): # totpop > self.Nth:
             # demographic stuff (stocking and winter survival)
-            Mw = np.exp(np.random.normal(self.lMwmu, self.lMwsd))
+            Mw = np.exp(self.lMwmu) #np.exp(np.random.normal(self.lMwmu, self.lMwsd))
             stockedNsurvived = a*self.maxcap*self.irphi
             N0CF = N0.copy()*np.exp(-150*Mw) # counterfactual N0, if no stocking had been done
             N0 = N0 + stockedNsurvived # stocking san acacia (t=3) in the fall
@@ -373,7 +399,14 @@ class Hatchery3_2_2:
             #    print(f'negative impact on Ne larger than positive impact on Ne: {(np.log(Ne_score)[0] - np.log(Ne_base) + np.log(Ne_next)[0] - np.log(Ne_CF)[0]):.3f}')
             # reward & done
             genetic_reward = ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0]))
-            reward = self.c + genetic_reward #np.sum(self.c/3*((Nr>self.popsize_1cpue).astype(int))) + genetic_reward #self.c + genetic_reward  #np.sum(c/3*((Nr>Nth_local).astype(int))) + ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])) # np.log(np.sum(N0_next+N1_next)) #1 + ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0]))  #100 + np.log(Ne_score)[0]   #self.extant +  #self.extant*(1/(1+np.exp(-0.001*(np.sum(N0+N1) - (np.log(1/0.01 - 1)/0.001) + self.Nth)))) # 0.001 = k, 0.01 = percentage of self.extant at Nth
+            reward = np.sum(self.c/3*((Nr>self.Nth_local).astype(int))) + genetic_reward
+            # self.c + genetic_reward 
+            # np.sum(self.c/3*((Nr>self.popsize_1cpue).astype(int))) + genetic_reward 
+            # self.c + genetic_reward  
+            #np.sum(c/3*((Nr>Nth_local).astype(int))) + ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])) 
+            # np.log(np.sum(N0_next+N1_next)) #1 + ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0]))  
+            # 100 + np.log(Ne_score)[0]   
+            # self.extant +  #self.extant*(1/(1+np.exp(-0.001*(np.sum(N0+N1) - (np.log(1/0.01 - 1)/0.001) + self.Nth)))) # 0.001 = k, 0.01 = percentage of self.extant at Nth
             done = False
 
             # update state & obs
@@ -532,7 +565,7 @@ class Hatchery3_2_2:
         output:
             LC: larval carrying capacity (3)
         """
-        if self.LC_prediction_method == 0: # hmm
+        if self.LC_prediction_method == 0: # hmm. This option is deprecated and is not updated. don't use.
             if self.discset == -1: # continuous
                 # get springflow at ABQ and SA for given springflow at Otowi
                 abqsf = np.minimum(np.maximum(q - self.Otowi_minus_ABQ_springflow, self.flowmodel.allowedmin[1]), self.flowmodel.allowedmax[1])
@@ -547,12 +580,13 @@ class Hatchery3_2_2:
                 # use pre-computed index of springflow in the LC to springflow mapping table
                 LCsamplesABQ = self.LC_ABQ.iloc[self.disc_sf_idxs_abq[np.array(self.state)[self.sidx['q']]]]
                 LCsamplesSA = self.LC_SA.iloc[self.disc_sf_idxs_sa[np.array(self.state)[self.sidx['q']]]]
-            angoisletaLC = np.random.choice(LCsamplesABQ.values[0], size=1)
+            angoLC = np.random.choice(LCsamplesABQ.values[0], size=1)
             saLC = np.random.choice(LCsamplesSA.values[0], size=1)
-            L = np.array([angoisletaLC, saLC, saLC]).T[0]
+            L = np.array([angoLC, saLC, saLC]).T[0]
         elif self.LC_prediction_method == 1: # gam
             # calculate the error for the LC prediction
-            angoisletaLC_error = np.clip(np.random.normal(0, self.LC_ABQ['std']), -1.96*self.LC_ABQ['std'], 1.96*self.LC_ABQ['std'])
+            angoLC_error = np.clip(np.random.normal(0, self.LC_ABQ['std']), -1.96*self.LC_ABQ['std'], 1.96*self.LC_ABQ['std'])
+            islLC_error = np.clip(np.random.normal(0, self.LC_IS['std']), -1.96*self.LC_IS['std'], 1.96*self.LC_IS['std'])
             saLC_error = np.clip(np.random.normal(0, self.LC_SA['std']), -1.96*self.LC_SA['std'], 1.96*self.LC_SA['std'])
             if self.discset == -1:
                 # get springflow at ABQ and SA for given springflow at Otowi
@@ -560,12 +594,15 @@ class Hatchery3_2_2:
                 sasf = np.minimum(np.maximum(q - self.Otowi_minus_SA_springflow, self.flowmodel.allowedmin[2]), self.flowmodel.allowedmax[2])
 
                 # predict the LC using the GAM model
-                angoisletaLC = np.maximum(self.LC_ABQ['model'].predict(abqsf) + angoisletaLC_error, 0) # make sure LC is not negative
+                angoLC = np.maximum(self.LC_ABQ['model'].predict(abqsf) + angoLC_error, 0) # make sure LC is not negative
+                islLC = np.maximum(self.LC_IS['model'].predict(sasf) + islLC_error, 0) # make sure LC is not negative
                 saLC = np.maximum(self.LC_SA['model'].predict(sasf) + saLC_error,0) # make sure LC is not negative
+
             else:
-                angoisletaLC = np.maximum(self.LC_ABQ['model'].predict(self.ABQq[np.array(self.state)[self.sidx['q']]]) + angoisletaLC_error, 0) # make sure LC is not negative
+                angoLC = np.maximum(self.LC_ABQ['model'].predict(self.ABQq[np.array(self.state)[self.sidx['q']]]) + angoLC_error, 0) # make sure LC is not negative
+                islLC = np.maximum(self.LC_IS['model'].predict(self.SAq[np.array(self.state)[self.sidx['q']]]) + islLC_error, 0) # make sure LC is not negative
                 saLC = np.maximum(self.LC_SA['model'].predict(self.SAq[np.array(self.state)[self.sidx['q']]]) + saLC_error, 0) # make sure LC is not negative
-            L = np.array([angoisletaLC, saLC, saLC]).T[0]
+            L = np.array([angoLC, islLC, saLC]).T[0]
         return L, abqsf, sasf
     
     
@@ -752,3 +789,30 @@ class Hatchery3_2_2:
                 Ne = np.array([1/(x**2/Neh + (1-x)**2/(New))])
             return Ne, Neh, New
 
+    def parameter_reset(self):
+        """
+        reset the parameters of the model to the initial values.
+        """
+        # reset 
+        self.alpha = self.param_uncertainty_df['alpha'].iloc[self.paramsampleidx]
+        self.beta = self.param_uncertainty_df['beta'].iloc[self.paramsampleidx]
+        self.mu = np.array([self.param_uncertainty_df['mu_a'].iloc[self.paramsampleidx], 
+                            self.param_uncertainty_df['mu_i'].iloc[self.paramsampleidx], 
+                            self.param_uncertainty_df['mu_s'].iloc[self.paramsampleidx]])
+        self.sd = self.param_uncertainty_df['sd'].iloc[self.paramsampleidx]
+        self.beta_2 = self.param_uncertainty_df['beta_2'].iloc[self.paramsampleidx]
+        self.tau = self.param_uncertainty_df['tau'].iloc[self.paramsampleidx]
+        self.r0 = self.param_uncertainty_df['r0'].iloc[self.paramsampleidx]
+        self.r1 = self.param_uncertainty_df['r1'].iloc[self.paramsampleidx]
+        self.lM0mu = np.array([self.param_uncertainty_df['lM0mu_a'].iloc[self.paramsampleidx], 
+                               self.param_uncertainty_df['lM0mu_i'].iloc[self.paramsampleidx], 
+                               self.param_uncertainty_df['lM0mu_s'].iloc[self.paramsampleidx]])
+        self.lM1mu = np.array([self.param_uncertainty_df['lM1mu_a'].iloc[self.paramsampleidx], 
+                               self.param_uncertainty_df['lM1mu_i'].iloc[self.paramsampleidx], 
+                               self.param_uncertainty_df['lM1mu_s'].iloc[self.paramsampleidx]])
+        self.lMwmu = np.array([self.param_uncertainty_df['lMwmu_a'].iloc[self.paramsampleidx],  
+                               self.param_uncertainty_df['lMwmu_i'].iloc[self.paramsampleidx], 
+                               self.param_uncertainty_df['lMwmu_s'].iloc[self.paramsampleidx]])
+        self.irphi = self.param_uncertainty_df['irphi'].iloc[self.paramsampleidx]
+
+        
