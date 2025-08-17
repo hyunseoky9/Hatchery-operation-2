@@ -86,8 +86,9 @@ class Hatchery3_2_3:
         self.eggcollection_max = paramdf['eggcollection_max'][self.parset] # maximum number of eggs that can be collected 
         self.larvaecollection_max = paramdf['larvaecollection_max'][self.parset] # maximum number of larvae that can be collected 
         self.sc = np.array([paramdf['s1'][self.parset],paramdf['s2'][self.parset],paramdf['s3'][self.parset]]) # cohort survival rate by age group
+        self.rlen = np.array([paramdf['angolen'][self.parset], paramdf['isllen'][self.parset], paramdf['salen'][self.parset]]) # reach length in km
         self.Nth = 1000 #paramdf['Nth'][self.parset]
-        self.dth = 150 # density threshold
+        self.dth = 150 # density threshold (fish/km)
         self.Nth_local = self.rlen* self.dth
         self.c = 3
         self.objective_type = 'soft focus2'
@@ -194,7 +195,8 @@ class Hatchery3_2_3:
         self.N1minmax = [0,1e7] # N1 and N1 minmax are the total population minmax.
         self.qminmax = [self.flowmodel.flowmin[0], self.flowmodel.flowmax[0]] # springflow in Otowi (Otowi gauge)
         self.Neminmax = [0, 1e7]
-        self.paramverminmax = [0,1] # version of parameters used in the environment. 0= 178, 1=3898
+        self.paramminmax = [np.min(self.param_uncertainty_df,axis=0),np.max(self.param_uncertainty_df, axis=0)]
+        #self.paramverminmax = [0,1] # version of parameters used in the environment. 0= 178, 1=3898
         self.aminmax = [0, 300000]
         # dimension for each variables
         self.N0_dim = (self.n_reach)
@@ -312,11 +314,10 @@ class Hatchery3_2_3:
         new_obs.append(np.log(Neval+1))
         
         self.paramsampleidx = np.random.randint(0, self.param_uncertainty_df.shape[0]) #np.random.choice([178,3898]) #178 #np.random.randint(0, self.param_uncertainty_df.shape[0])
-        self.paramsampleidx = np.random.choice([178,3898])
-        self.parameter_reset() # resample parameters from the posterior distribution
-        newparamver = 0 if self.paramsampleidx==178 else 1
-        new_state.append(np.array([newparamver]))
-        new_obs.append(np.array([newparamver]))
+        paramvals = self.parameter_reset() # resample parameters from the posterior distribution
+        #newparamver = 0 if self.paramsampleidx==178 else 1
+        new_state.append(paramvals)
+        new_obs.append(paramvals)
 
         self.state = np.concatenate(new_state)
         self.obs = np.concatenate(new_obs)
@@ -403,20 +404,20 @@ class Hatchery3_2_3:
             done = False
             
             # update state & obs
-            if self.discset == -1:
+            if self.discset == -1: # continuous version
                 logN0_next = np.log(N0_next+1)
                 logN1_next = np.log(N1_next+1)
                 logNe_next = np.log(Ne_next+1)
                 logq_next = np.array([np.log(q_next+1)])
-                self.state = np.concatenate([logN0_next, logN1_next, logq_next, logNe_next,self.state[self.sidx['paramver']]])
-                self.obs = np.concatenate([logN0_next, logN1_next, logq_next, logNe_next,self.obs[self.oidx['Oparamver']]])
-            else:
+                self.state = np.concatenate([logN0_next, logN1_next, logq_next, logNe_next,self.state[self.sidx['params']]])
+                self.obs = np.concatenate([logN0_next, logN1_next, logq_next, logNe_next,self.obs[self.oidx['Oparams']]])
+            else: # discrete version (deprecated)
                 N0_next_idx = [self._discretize_idx(val, self.states['N0']) for val in N0_next]
                 N1_next_idx = [self._discretize_idx(val, self.states['N1']) for val in N1_next]
                 q_next_idx = [self._discretize_idx(q_next, self.states['q'])]
                 Ne_next_idx = [self._discretize_idx(Ne_next, self.states['Ne'])]
-                self.state = np.concatenate([N0_next_idx, N1_next_idx , q_next_idx, Ne_next_idx, self.state[self.sidx['paramver']]]).astype(int)
-                self.obs = np.concatenate([N0_next_idx, N1_next_idx, q_next_idx, Ne_next_idx, self.obs[self.oidx['Oparamver']]]).astype(int)
+                self.state = np.concatenate([N0_next_idx, N1_next_idx , q_next_idx, Ne_next_idx, self.state[self.sidx['params']]]).astype(int)
+                self.obs = np.concatenate([N0_next_idx, N1_next_idx, q_next_idx, Ne_next_idx, self.obs[self.oidx['Oparams']]]).astype(int)
         else: # extinct
             reward = 0
             done = True
@@ -428,7 +429,7 @@ class Hatchery3_2_3:
         output: dictionary with states, observations, and actions.
         """
 
-        if discretization_set == 0:
+        if discretization_set == 0: # discrete version. deprecated
             states = {
                 "N0": list(np.linspace(self.N0minmax[0], self.N0minmax[1], 31)), # population size dim:(3)
                 "N1": list(np.linspace(self.N1minmax[0], self.N1minmax[1], 31)), # population size (3)
@@ -450,14 +451,14 @@ class Hatchery3_2_3:
                 "logN1": list(np.log(np.array(self.N1minmax)+1)), # log population size for age 1+ (3)
                 "logq": list(np.log(np.array(self.qminmax)+1)), # log spring flow in Otowi (Otowi) (1)
                 "logNe": list(np.log(np.array(self.Neminmax)+1)), # Effective population size of the wild population BEFORE stocking (1)
-                "paramver": [0,1], # log version of parameters used in the environment
+                "params": list(np.array([0,1])) # parameters. the min max values here, [0,1], are just placeholders. each parameters have their own min max described in self.paramminmax
             }
             observations = {
                 "OlogN0": states['logN0'],
                 "OlogN1": states['logN1'],
                 "Ologq": states['logq'],
                 "OlogNe": states['logNe'],
-                "Oparamver": states['paramver'],
+                "Oparams": states["params"],
             }
         # action space is 4 dimensional and each dimension is continuous between 0 and 1.
         actions = {
@@ -811,5 +812,5 @@ class Hatchery3_2_3:
                                self.param_uncertainty_df['lMwmu_i'].iloc[self.paramsampleidx], 
                                self.param_uncertainty_df['lMwmu_s'].iloc[self.paramsampleidx]])
         self.irphi = self.param_uncertainty_df['irphi'].iloc[self.paramsampleidx]
-
-        
+        paramset = np.concatenate(([self.alpha], [self.beta], self.mu, [self.sd], [self.beta_2], [self.tau], [self.r0], [self.r1], self.lM0mu, self.lM1mu, self.lMwmu, [self.irphi]))
+        return paramset

@@ -2,8 +2,6 @@ from call_paramset import call_paramset, call_env
 import numpy as np
 import torch
 import torch.multiprocessing as mp
-from choose_action import choose_action
-from choose_action_a3c import choose_action_a3c
 def calc_performance(env, device, rms, fstack, policy, episodenum=1000, t_maxstep = 1000):
     """
     same as calc_performance.py but built for ddpg and td3 algorithms. 

@@ -89,10 +89,10 @@ class Hatchery3_2_2:
         self.sc = np.array([paramdf['s1'][self.parset],paramdf['s2'][self.parset],paramdf['s3'][self.parset]]) # cohort survival rate by age group
         self.rlen = np.array([paramdf['angolen'][self.parset], paramdf['isllen'][self.parset], paramdf['salen'][self.parset]]) # reach length in km
         self.Nth = 1000 #paramdf['Nth'][self.parset]
-        self.dth = 150 # density threshold
+        self.dth = 10 # density threshold
         self.Nth_local = self.rlen* self.dth
         self.c = 6
-        self.objective_type = 'soft focus 2'
+        self.objective_type = 'hard focus no gen'
         print(f'Nth: {self.Nth}, Nth_local: {self.Nth_local}, c: {self.c}, objective_type: {self.objective_type}')
         self.extant = paramdf['extant'][self.parset] # reward for not being
         self.prodcost = paramdf['prodcost'][self.parset] # production cost in spring if deciding to produce
@@ -315,7 +315,7 @@ class Hatchery3_2_2:
         # sample
         if self.param_uncertainty:
             self.paramsampleidx = np.random.randint(0, self.param_uncertainty_df.shape[0]) #np.random.choice([178,3898]) #178 #np.random.randint(0, self.param_uncertainty_df.shape[0])
-            self.parameter_reset() # resample parameters from the posterior distribution
+            paramvals = self.parameter_reset() # resample parameters from the posterior distribution
 
         self.state = np.concatenate(new_state)
         self.obs = np.concatenate(new_obs)
@@ -349,7 +349,7 @@ class Hatchery3_2_2:
         a = a[0:self.n_reach] # only take the first n_reach elements of the action vector
         totpop = totN0 + totN1
 
-        if not all(Nr < self.Nth_local): # all(Nr >= self.Nth_local): #all((N0 + N1) >= self.Nth): #all((N0 + N1) >= self.Nth): #all((N0 + N1) >= self.Nth): #(N0+N1)[1] >= 0:#self.Nth: #all((N0 + N1) >= self.Nth): # totpop > self.Nth:
+        if all(Nr >= self.Nth_local): #not all(Nr < self.Nth_local): # all(Nr >= self.Nth_local): #all((N0 + N1) >= self.Nth): #all((N0 + N1) >= self.Nth): #all((N0 + N1) >= self.Nth): #(N0+N1)[1] >= 0:#self.Nth: #all((N0 + N1) >= self.Nth): # totpop > self.Nth:
             # demographic stuff (stocking and winter survival)
             Mw = np.exp(self.lMwmu) #np.exp(np.random.normal(self.lMwmu, self.lMwsd))
             stockedNsurvived = a*self.maxcap*self.irphi
@@ -399,7 +399,8 @@ class Hatchery3_2_2:
             #    print(f'negative impact on Ne larger than positive impact on Ne: {(np.log(Ne_score)[0] - np.log(Ne_base) + np.log(Ne_next)[0] - np.log(Ne_CF)[0]):.3f}')
             # reward & done
             genetic_reward = ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0]))
-            reward = np.sum(self.c/3*((Nr>self.Nth_local).astype(int))) + genetic_reward
+            reward = self.c #+ genetic_reward
+            # np.sum(self.c/3*((Nr>self.Nth_local).astype(int))) + genetic_reward
             # self.c + genetic_reward 
             # np.sum(self.c/3*((Nr>self.popsize_1cpue).astype(int))) + genetic_reward 
             # self.c + genetic_reward  
@@ -814,5 +815,5 @@ class Hatchery3_2_2:
                                self.param_uncertainty_df['lMwmu_i'].iloc[self.paramsampleidx], 
                                self.param_uncertainty_df['lMwmu_s'].iloc[self.paramsampleidx]])
         self.irphi = self.param_uncertainty_df['irphi'].iloc[self.paramsampleidx]
-
-        
+        paramset = np.concatenate(([self.alpha], [self.beta], self.mu, [self.sd], [self.beta_2], [self.tau], [self.r0], [self.r1], self.lM0mu, self.lM1mu, self.lMwmu, [self.irphi]))
+        return paramset

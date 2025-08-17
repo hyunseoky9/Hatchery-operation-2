@@ -3,8 +3,6 @@ import random
 import numpy as np
 import torch
 import torch.multiprocessing as mp
-from choose_action import choose_action
-from choose_action_a3c import choose_action_a3c
 def calc_performance_parallel(env, device, seed, config, rms, fstack, policy=None, episodenum=1000, t_maxstep=1000):
     """
     same as calc_performance-parallel.py but built for ddpg and td3 algorithms. 
