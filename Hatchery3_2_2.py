@@ -91,7 +91,7 @@ class Hatchery3_2_2:
         self.Nth = 1000 #paramdf['Nth'][self.parset]
         self.dth = 10 # density threshold
         self.Nth_local = self.rlen* self.dth
-        self.c = 6
+        self.c =1
         self.objective_type = 'hard focus no gen'
         print(f'Nth: {self.Nth}, Nth_local: {self.Nth_local}, c: {self.c}, objective_type: {self.objective_type}')
         self.extant = paramdf['extant'][self.parset] # reward for not being
@@ -399,7 +399,7 @@ class Hatchery3_2_2:
             #    print(f'negative impact on Ne larger than positive impact on Ne: {(np.log(Ne_score)[0] - np.log(Ne_base) + np.log(Ne_next)[0] - np.log(Ne_CF)[0]):.3f}')
             # reward & done
             genetic_reward = ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0]))
-            reward = self.c #+ genetic_reward
+            reward = self.c + genetic_reward
             # np.sum(self.c/3*((Nr>self.Nth_local).astype(int))) + genetic_reward
             # self.c + genetic_reward 
             # np.sum(self.c/3*((Nr>self.popsize_1cpue).astype(int))) + genetic_reward 
