@@ -43,10 +43,11 @@ class Actor(nn.Module):
         probs  = torch.softmax(logits, dim=-1)  # simplex projection
         return probs
 
-    def act(self, state, ou_process, device="cpu"):
+    def act(self, state, ou_process):
         with torch.no_grad():
             # 1. tensor-ise state and add batch dim
-            s = torch.as_tensor(state.copy(), dtype=torch.float32, device=device).unsqueeze(0)
+            dev = next(self.parameters()).device
+            s = torch.as_tensor(state, dtype=torch.float32, device=dev).unsqueeze(0)
             logits = self.body(s).squeeze(0) # shape [K]
             # 3. OU noise in logit space
             noise  = torch.as_tensor(ou_process.sample(),

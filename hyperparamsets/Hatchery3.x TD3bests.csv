@@ -22,20 +22,21 @@ exploration_sigma_start,0.2,0.2,0.2,0.2,0.2,0.2,0.2,0.2,0.2
 exploration_sigma_end,0.2,0.2,0.2,0.05,0.05,0.05,0.05,0.05,0.05
 exploration_decay_fraction,0.3,0.3,0.3,0.3,0.3,0.3,0.3,0.3,0.3
 buffer_size,100000,100000,100000,100000,100000,100000,100000,100000,100000
-batch_size,64,64,128,128,128,128,128,128,128
+batch_size,64,64,128,128,128,128,128,128,1024
 tau,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01
 policy_delay,2,2,2,2,2,2,2,2,2
 target_noise,0.2,0.05,0.05,0.05,0.05,0.05,0.05,0.05,0.05
 target_noise_clip,0.5,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25
-performance_sampleN,1000,1000,1000,10,1000,1000,1000,1000,1000
-parallel_testing,0,0,0,0,1,1,0,0,1
+performance_sampleN,1000,1000,1000,10,1000,1000,1000,1000,10
+parallel_testing,0,0,0,0,1,1,0,0,0
 evaluation_interval,1000,1000,1000,100,1000,1000,1000,1000,1000
 standardize,1,1,1,1,1,1,1,1,1
 max_steps,50,50,50,50,50,50,50,50,50
-episodenum,6000,6000,6000,300,6000,6000,6000,6000,6000
+episodenum,6000,6000,6000,300,6000,6000,6000,6000,1000
 envid,Hatchery3.2.2,Hatchery3.2.2,Hatchery3.2.2,Hatchery3.2.2,Hatchery3.2.2,Hatchery3.2.2,Hatchery3.2.2,Hatchery3.2.3,Hatchery3.2.2
 envconfig,"{'init':None,'paramset':1,'discretization':-1,'LC':1,'uncertainty':0}","{'init':None,'paramset':1,'discretization':-1,'LC':1,'uncertainty':0}","{'init':None,'paramset':1,'discretization':-1,'LC':1,'uncertainty':0}","{'init':None,'paramset':1,'discretization':-1,'LC':1,'uncertainty':0}","{'init':None,'paramset':1,'discretization':-1,'LC':1,'uncertainty':0}","{'init':None,'paramset':1,'discretization':-1,'LC':1,'uncertainty':1}","{'init':None,'paramset':1,'discretization':-1,'LC':1,'uncertainty':1}","{'init':None,'paramset':1,'discretization':-1,'LC':1,'uncertainty':1}","{'init':None,'paramset':1,'discretization':-1,'LC':1,'uncertainty':1}"
 seed,random,random,random,11,random,random,random,random,random
 framestacking,1,1,1,1,1,1,4,1,1
+device,cpu,cpu,cpu,cpu,cpu,cpu,cpu,cpu,cuda
 note,this one learns the isleta extinction vs Ne tradeoff very well,"lowered target noise. this one learns the isleta vs SA tradeoff better than paramset0, but still pretty hit or miss (learns 2 out of 14 times)","increased batch size to 128 and changed the critic network architecture to only having trunk layers with [128,128]. This new architecture was a huge success. Now the action doesnt get pinned to all-in type behaviors and the policies are not fixed across state space!!",testing paramset,paramset 2 but added decay. Performs similarly to param2,paramset 4 but uncertain parameters,same as 5 but framestack (4),param version observable.,paramset 5 test run for cuda modification
 score,na,na,na,na,na,na,na,na,na

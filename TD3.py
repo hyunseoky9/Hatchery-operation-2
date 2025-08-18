@@ -45,9 +45,30 @@ class TD3():
         self.testwd = f'./TD3 results/{self.new_directory}'
         self.logger = setup_logger(self.testwd) ## set up logging
 
-        # device for pytorch neural network
-        self.device = "cpu"
-        print(f"Using {self.device} device")
+
+        # Device selection (goes in __init__, right after logger setup) ---
+        # options from paramdf['device']: {'cuda','gpu','cpu','mps'}
+        requested_device = (
+            str(self.paramdf['device']).lower()
+            if isinstance(self.paramdf, dict) and 'device' in self.paramdf
+            else 'auto'
+        )
+
+        if requested_device == 'auto':
+            if torch.cuda.is_available():
+                self.device = torch.device('cuda')
+            elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                self.device = torch.device('mps')
+            else:
+                self.device = torch.device('cpu')
+        elif requested_device in ('cuda', 'gpu'):
+            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        elif requested_device == 'mps':
+            self.device = torch.device('mps' if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available() else 'cpu')
+        else:
+            self.device = torch.device('cpu')
+
+        print(f"Using {self.device.type} device")
 
         # parameters
         ## NN parameters
@@ -139,6 +160,8 @@ class TD3():
         self.actor_local = Actor(self.state_size*self.fstack, self.action_size, self.actor_hidden_size, self.actor_hidden_num,
                                   self.actor_lrdecayrate, self.actor_lr, self.fstack).to(self.device)
         self.actor_target  = copy.deepcopy(self.actor_local).to(self.device)
+        self.actor_cpu = copy.deepcopy(self.actor_local).to('cpu').eval()
+
 
         ## Critic (Value) Model
         if self.critic_state_hidden_num == 0:
@@ -261,11 +284,14 @@ class TD3():
             if self.actor_min_lr != float('-inf'):
                 if self.actor_opt.param_groups[0]['lr'] < self.actor_min_lr:
                     self.actor_opt.param_groups[0]['lr'] = self.actor_min_lr
+            self.actor_cpu.load_state_dict(self.actor_local.state_dict())
+
 
             # 5. Soft-update target nets 
             self.soft_update(self.critic1_local, self.critic1_target, self.tau)
             self.soft_update(self.critic2_local, self.critic2_target, self.tau)
             self.soft_update(self.actor_local,  self.actor_target,  self.tau)
+        
 
     def soft_update(self, local_net, target_net, tau):
         """theta_target ← tau theta_local  +  (1-tau) theta_target"""
@@ -286,7 +312,8 @@ class TD3():
             state = self.rms.normalize(self.env.obs) if self.standardize else self.env.obs
             state = np.concatenate([state] * self.fstack)
             for t in range(max_t):
-                action = self.actor_local.act(state,self.noise)  # get action from actor (with noise for exploration)
+                #action = self.actor_local.act(state,self.noise)  # get action from actor (with noise for exploration)
+                action = self.actor_cpu.act(state, self.noise)
                 next_state, reward, done, _ = self.env.step(action)  # step in the env
                 if self.standardize: # standardize
                     self.rms.stored_batch.append(next_state) # store the state for running mean std calculation
