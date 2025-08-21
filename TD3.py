@@ -160,7 +160,6 @@ class TD3():
         self.actor_local = Actor(self.state_size*self.fstack, self.action_size, self.actor_hidden_size, self.actor_hidden_num,
                                   self.actor_lrdecayrate, self.actor_lr, self.fstack).to(self.device)
         self.actor_target  = copy.deepcopy(self.actor_local).to(self.device)
-        self.actor_cpu = copy.deepcopy(self.actor_local).to('cpu').eval()
 
 
         ## Critic (Value) Model
@@ -284,7 +283,6 @@ class TD3():
             if self.actor_min_lr != float('-inf'):
                 if self.actor_opt.param_groups[0]['lr'] < self.actor_min_lr:
                     self.actor_opt.param_groups[0]['lr'] = self.actor_min_lr
-            self.actor_cpu.load_state_dict(self.actor_local.state_dict())
 
 
             # 5. Soft-update target nets 
@@ -312,8 +310,7 @@ class TD3():
             state = self.rms.normalize(self.env.obs) if self.standardize else self.env.obs
             state = np.concatenate([state] * self.fstack)
             for t in range(max_t):
-                #action = self.actor_local.act(state,self.noise)  # get action from actor (with noise for exploration)
-                action = self.actor_cpu.act(state, self.noise)
+                action = self.actor_local.act(state,self.noise)  # get action from actor (with noise for exploration)
                 next_state, reward, done, _ = self.env.step(action)  # step in the env
                 if self.standardize: # standardize
                     self.rms.stored_batch.append(next_state) # store the state for running mean std calculation

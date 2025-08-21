@@ -89,10 +89,10 @@ class Hatchery3_2_2:
         self.sc = np.array([paramdf['s1'][self.parset],paramdf['s2'][self.parset],paramdf['s3'][self.parset]]) # cohort survival rate by age group
         self.rlen = np.array([paramdf['angolen'][self.parset], paramdf['isllen'][self.parset], paramdf['salen'][self.parset]]) # reach length in km
         self.Nth = 1000 #paramdf['Nth'][self.parset]
-        self.dth = 10 # density threshold
+        self.dth = 100 # density threshold
         self.Nth_local = self.rlen* self.dth
-        self.c = 1
-        self.objective_type = 'hard focus'
+        self.c = 6
+        self.objective_type = 'soft focus2'
         print(f'Nth: {self.Nth}, Nth_local: {self.Nth_local}, c: {self.c}, objective_type: {self.objective_type}')
         self.extant = paramdf['extant'][self.parset] # reward for not being
         self.prodcost = paramdf['prodcost'][self.parset] # production cost in spring if deciding to produce
@@ -181,7 +181,8 @@ class Hatchery3_2_2:
         self.AVGage_of_age2plus = 2*(1/(1+self.avgsa)) + 3*(self.avgsa/(1+self.avgsa)) # assume that the fish only lives till age 3
         
         # number of broodstock used for producing maximum capacity. Assumes maximum capacity is produced every year.
-        self.Nb = 2*self.maxcap/1000 # the value 1000 is Thomas' ballpark estimate of stock-ready fish produced per female #  2*self.maxcap/self.fc[1]
+        self.stockreadyfish_per_female = np.median([645.4969697,962.1485714,743.7636364,354.9875,634.92]) # first four values from bio park, 5th value from dexter. 
+        self.Nb = 2*self.maxcap/self.stockreadyfish_per_female # the value 1000 is Thomas' ballpark estimate of stock-ready fish produced per female #  2*self.maxcap/self.fc[1]
         # the value 1000 is Thomas' ballpark estimate of stock-ready fish produced per female
 
         # observation related parameters
@@ -349,7 +350,7 @@ class Hatchery3_2_2:
         a = a[0:self.n_reach] # only take the first n_reach elements of the action vector
         totpop = totN0 + totN1
 
-        if all(Nr >= self.Nth_local): #not all(Nr < self.Nth_local): # all(Nr >= self.Nth_local): #all((N0 + N1) >= self.Nth): #all((N0 + N1) >= self.Nth): #all((N0 + N1) >= self.Nth): #(N0+N1)[1] >= 0:#self.Nth: #all((N0 + N1) >= self.Nth): # totpop > self.Nth:
+        if not all(Nr < self.Nth_local): #not all(Nr < self.Nth_local): # all(Nr >= self.Nth_local): #all((N0 + N1) >= self.Nth): #all((N0 + N1) >= self.Nth): #all((N0 + N1) >= self.Nth): #(N0+N1)[1] >= 0:#self.Nth: #all((N0 + N1) >= self.Nth): # totpop > self.Nth:
             # demographic stuff (stocking and winter survival)
             Mw = np.exp(self.lMwmu) #np.exp(np.random.normal(self.lMwmu, self.lMwsd))
             stockedNsurvived = a*self.maxcap*self.irphi
@@ -399,7 +400,7 @@ class Hatchery3_2_2:
             #    print(f'negative impact on Ne larger than positive impact on Ne: {(np.log(Ne_score)[0] - np.log(Ne_base) + np.log(Ne_next)[0] - np.log(Ne_CF)[0]):.3f}')
             # reward & done
             genetic_reward = ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0]))
-            reward = self.c #+ genetic_reward
+            reward = self.c + genetic_reward
             # np.sum(self.c/3*((Nr>self.Nth_local).astype(int))) + genetic_reward
             # self.c + genetic_reward 
             # np.sum(self.c/3*((Nr>self.popsize_1cpue).astype(int))) + genetic_reward 

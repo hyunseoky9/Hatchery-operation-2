@@ -113,7 +113,8 @@ Parameterization of the environments
 - parameterization_hatchery3.1.csv - for 3.1 and 3.2.x.
 Parmaeter posterior sample files
 - uncertain_parameters_posterior_samples4POMDP.csv: posterior samples derived from the Yackulic IPM that I ran using int3re.stan using pseudocode4Hyun_lab.R (in /hatchery operation/codes/popmodel/genetic_var_added). 
-- 2021-25 s pawning summary.xlsx - information on the number of stock-ready-fish produced per females for BIOPARK. Used Ponded/female values in the first tab by multiplying it by 0.8 (as Thomas A. recommended) and averaging the values across years. The file itself is not directly used, but this value is used in defining the variable Nb in the Hatchery3.2.2 environment script. 
+- 2021-25 spawning summary.xlsx - information on the number of stock-ready-fish produced per females for BIOPARK. Used Ponded/female values in the first tab after multiplying it by 0.8 (as Thomas A. recommended) and averaging the values across years. The file itself is not directly used, but this value is used in defining the variable Nb in the Hatchery3.2.2 environment script. 
+- Dexter RGSM spawning.xlsx - same thing as above but for Dexter. Only for 2025. Divide "Expected number of fish to harvest" by "females that spawned" to get the number of stock-ready-fish produced per female. (800)
 
 
 ## Output Files
@@ -152,7 +153,7 @@ These are outputs that aren't Q,V, or policy outputs but outputs made by the alg
 - trp_{envID}_par{parID}_dis{discID}.pkl: saved transition probability for the environment used for value iteration. Took one day of simulating transitions to make this.
 - {state var}prob(tau_)_{envID}_par{parID}_dis{discID}.pkl: saved transition probability for each state variable (e.g. H, NW) in different tau (season). Made for value iteration for env1.0, but not used because calculating transition probability by state variables did not do very well in getting expected transition probabilities.
 
-
+- persistence_probabilities_Hatchery3.2.2.pkl - persistence probability for every different parameter sample from the posterior distribution.
 
 ## Environments.
 - *Env0.0*: Second environment model made. Drastically simplified version of Env1.0. It was made to practice the tabular Q learning. Now that I've moved on from tabular Q learning, it is no longer relevant.
