@@ -32,9 +32,10 @@ Tiger POMDP (Chades et al. 2008)
 - *env1.0_performance_testing.ipynb*: compute average reward for a given policy
 - *env1.0_plotting_running.ipynb*: running optimization algorithms (value iteration, Tabular Q learning, DeepQN, etc.) and then analyzing/plotting the results for env1.0
 - *env0.0_plotting_running.ipynb*: same as above but for env0.0
-
 (environment name)_performance_testing.ipynb is for evaluating the the named environment, and (environment name)_plotting_running.ipynb is training the named env.
 
+### Additional notebooks
+- *effective population size calculation.ipynb*: effective population size calculation note
 ### Optimization algorithms
 #### value iteration
 - *value_iteration.py*: perform value iteration
@@ -115,6 +116,8 @@ Parmaeter posterior sample files
 - uncertain_parameters_posterior_samples4POMDP.csv: posterior samples derived from the Yackulic IPM that I ran using int3re.stan using pseudocode4Hyun_lab.R (in /hatchery operation/codes/popmodel/genetic_var_added). 
 - 2021-25 spawning summary.xlsx - information on the number of stock-ready-fish produced per females for BIOPARK. Used Ponded/female values in the first tab after multiplying it by 0.8 (as Thomas A. recommended) and averaging the values across years. The file itself is not directly used, but this value is used in defining the variable Nb in the Hatchery3.2.2 environment script. 
 - Dexter RGSM spawning.xlsx - same thing as above but for Dexter. Only for 2025. Divide "Expected number of fish to harvest" by "females that spawned" to get the number of stock-ready-fish produced per female. (800)
+- Osborne et al 2024 LDNe (Fig4b).csv - mean and CI values for LDNe measured from Osborne et al. 2024 (fig4b) using WebPlotDigitizer. 
+- Osborne et al. 2024 _fib4b_.tar - contains file that you can load on WebPlotDigitizer
 
 
 ## Output Files

@@ -947,7 +947,7 @@ class Hatchery3_2:
             else:
                 stocked_cont = np.sum(p)
                 total_cont = np.sum(N0)
-                x = stocked_cont/(total_cont + stocked_cont)
+                x = stocked_cont/total_cont
                 #effspawner = N0 + self.beta_2*N1 # effective number of spawners
                 #stocked_cont = np.sum((self.alpha*p)/(1 + self.alpha*effspawner/kappa)) # stocked fish contribution
                 #total_cont =  np.sum((self.alpha*(effspawner))/(1 + self.alpha*effspawner/kappa)) # wild fish contribution

@@ -14,6 +14,8 @@ class Hatchery3_2_2:
     """
     Same as hatchery 3.2, but all the fall actions are taken at once, and spring decision is not taken. It's assumed that maximum capacity is produced every year.
     action is a vector of 4, where the first three are stocking proportions in angostura, isleta, and san acacia, and the last one is the discard proportion.
+    Another fix from Hatchery3_2 is that calculating wild Ne uses only wild origin N0 (N0CF; N0 counter-factual). This prevents double dipping in the R-L equation
+    ensuring that Ne,w in the R-L only includes wild-origin spawners. This was not possible in 3.2 because stocked fish were baked into N0 during fall timesteps (t=1,2,3)
     """
     def __init__(self,initstate,parameterization_set,discretization_set,LC_prediction_method, param_uncertainty=0):
         """
@@ -93,7 +95,7 @@ class Hatchery3_2_2:
         self.Nth_local = self.rlen* self.dth
         self.c = 6
         self.objective_type = 'soft focus2'
-        print(f'Nth: {self.Nth}, Nth_local: {self.Nth_local}, c: {self.c}, objective_type: {self.objective_type}')
+        #print(f'Nth: {self.Nth}, Nth_local: {self.Nth_local}, c: {self.c}, objective_type: {self.objective_type}')
         self.extant = paramdf['extant'][self.parset] # reward for not being
         self.prodcost = paramdf['prodcost'][self.parset] # production cost in spring if deciding to produce
         self.unitcost = paramdf['unitcost'][self.parset] # unit production cost.
@@ -354,10 +356,12 @@ class Hatchery3_2_2:
             # demographic stuff (stocking and winter survival)
             Mw = np.exp(self.lMwmu) #np.exp(np.random.normal(self.lMwmu, self.lMwsd))
             stockedNsurvived = a*self.maxcap*self.irphi
-            N0CF = N0.copy()*np.exp(-150*Mw) # counterfactual N0, if no stocking had been done
+            N0CF = N0.copy()*np.exp(-150*Mw) # counterfactual N0, if no stocking had been done. Also equivalent to wild-origin spawners.
             N0 = N0 + stockedNsurvived # stocking san acacia (t=3) in the fall
             N0 = np.minimum(N0*np.exp(-150*Mw),np.ones(self.n_reach)*self.N0minmax[1]) # stocking san acacia (t=3) in the fall
             N1 = N1*np.exp(-150*Mw)
+            print(f'N0CF: {N0CF}')
+            print(f'N0: {N0}')
             p = stockedNsurvived*np.exp(-150*Mw) # Total number of fish stocked in a season that make it to breeding season
             Ne_score, Neh, Ne_base = self.NeCalc0(N0,N1,p, self.Nb,None,None,1)
             extra_info['Ne_score'] = Ne_score # Ne_score is the Ne until you stock in the next fall.
@@ -390,8 +394,8 @@ class Hatchery3_2_2:
             q_next = self.flowmodel.nextflow(q) # springflow and forecast in spring
             q_next = q_next[0][0]
             # Ne calculation
-            Ne_CF, _, _ = self.NeCalc0(N0CF,N1,p,self.Nb,genT,kappa,0) # Ne if no stocking had been done
-            Ne_next, _, _ = self.NeCalc0(N0,N1,p,self.Nb,genT,kappa,0)
+            #Ne_CF, _, _ = self.NeCalc0(N0CF,N1,p,self.Nb,genT,kappa,0) # Ne if no stocking had been done
+            Ne_next, _, _ = self.NeCalc0(N0CF,N1,p,self.Nb,genT,kappa,0) # N0CF is used because we need to keep track of the wild effective population size. 
             extra_info['Ne'] = Ne_next # Ne_wild is the Ne until you stock in the next fall.
             #extra_info['Ne_imp'] = ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])) # Ne_CF is the Ne if no stocking had been done.
             #if ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])) >=0:
@@ -399,7 +403,7 @@ class Hatchery3_2_2:
             #else:
             #    print(f'negative impact on Ne larger than positive impact on Ne: {(np.log(Ne_score)[0] - np.log(Ne_base) + np.log(Ne_next)[0] - np.log(Ne_CF)[0]):.3f}')
             # reward & done
-            genetic_reward = ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0]))
+            genetic_reward = (np.log(Ne_score)[0] - np.log(Ne_base)) # + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])
             reward = self.c + genetic_reward
             # np.sum(self.c/3*((Nr>self.Nth_local).astype(int))) + genetic_reward
             # self.c + genetic_reward 
@@ -779,7 +783,7 @@ class Hatchery3_2_2:
             else:
                 stocked_cont = np.sum(p) # stocked contribution
                 total_cont = np.sum(N0) # wild contribution
-                x = stocked_cont/(total_cont + stocked_cont)
+                x = stocked_cont/total_cont
                 #effspawner = N0 + self.beta_2*N1 # effective number of spawners
                 #stocked_cont = np.sum((self.alpha*p)/(1 + self.alpha*effspawner/kappa)) # stocked fish contribution
                 #total_cont =  np.sum((self.alpha*(effspawner))/(1 + self.alpha*effspawner/kappa)) # wild fish contribution

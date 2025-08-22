@@ -391,8 +391,8 @@ class Hatchery3_2_3:
             q_next = self.flowmodel.nextflow(q) # springflow and forecast in spring
             q_next = q_next[0][0]
             # Ne calculation
-            Ne_CF, _, _ = self.NeCalc0(N0CF,N1,p,self.Nb,genT,kappa,0) # Ne if no stocking had been done
-            Ne_next, _, _ = self.NeCalc0(N0,N1,p,self.Nb,genT,kappa,0)
+            #Ne_CF, _, _ = self.NeCalc0(N0CF,N1,p,self.Nb,genT,kappa,0) # Ne if no stocking had been done
+            Ne_next, _, _ = self.NeCalc0(N0CF,N1,p,self.Nb,genT,kappa,0)
             extra_info['Ne'] = Ne_next # Ne_wild is the Ne until you stock in the next fall.
             #extra_info['Ne_imp'] = ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])) # Ne_CF is the Ne if no stocking had been done.
             #if ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])) >=0:
@@ -400,7 +400,7 @@ class Hatchery3_2_3:
             #else:
             #    print(f'negative impact on Ne larger than positive impact on Ne: {(np.log(Ne_score)[0] - np.log(Ne_base) + np.log(Ne_next)[0] - np.log(Ne_CF)[0]):.3f}')
             # reward & done
-            genetic_reward = ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0]))
+            genetic_reward = (np.log(Ne_score)[0] - np.log(Ne_base)) #+ (np.log(Ne_next)[0] - np.log(Ne_CF)[0])
             reward = np.sum(self.c/3*((Nr>self.Nth_local).astype(int))) + genetic_reward #np.sum(self.c/3*((Nr>self.popsize_1cpue).astype(int))) + genetic_reward #self.c + genetic_reward  #np.sum(c/3*((Nr>Nth_local).astype(int))) + ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])) # np.log(np.sum(N0_next+N1_next)) #1 + ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0]))  #100 + np.log(Ne_score)[0]   #self.extant +  #self.extant*(1/(1+np.exp(-0.001*(np.sum(N0+N1) - (np.log(1/0.01 - 1)/0.001) + self.Nth)))) # 0.001 = k, 0.01 = percentage of self.extant at Nth
             done = False
             
