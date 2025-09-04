@@ -21,6 +21,7 @@ real-deals
 - *Hatchery3_2.py*: uses effective popualtion size. Still has to take spring production action and stocking actions have to be taken one reach at a time, and it's for Q-learning. (not that useful)
 - *Hatchery3_2_2.py*: Same as hatchery 3.2, but all the fall actions are taken at once, and spring decision is not taken. MAIN MODEL USED FOR THE PROJECT. You can incorporate uncertainty in the parameters as well sampling from the posterior distribution.
 - *Hatchery3_2_3.py*: Same as hatchery 3.2.2, but all the population parameters are observable.
+- *Hatchery3_2_4.py*: Same as hatchery 3.2.2, but simulation does not terminate anymore. If the subpopulation goes below its local threshold, the subpopulation will fall to 0. Even all subpopulation goes to 0, the populatin will keep going
   
 Tiger POMDP (Chades et al. 2008)
 - *tiger.py*: Tiger POMDP used for testing DRQN
@@ -36,6 +37,7 @@ Tiger POMDP (Chades et al. 2008)
 
 ### Additional notebooks
 - *effective population size calculation.ipynb*: effective population size calculation note
+- *effective population size validation.ipynb*: validation of the effective population size model to the actual LDNe data from Osborne et al. 2024 using the population estimates from Yackulic et al. 2023
 ### Optimization algorithms
 #### value iteration
 - *value_iteration.py*: perform value iteration
@@ -171,3 +173,7 @@ Collection of hyperparameters used to run Deep Q network and other network based
 - (environment) DQNbest.csv: hyperparameter settings used for DQN (rainbow)
 - (environment) TD3bests.csv: hyperparameter settings used for TD3
 - (environment) DDPGbests.csv: hyperparameter settings used for DDPG
+
+
+## ETC.
+when making new environmnet.txt: when you make a new environment, make sure those environments are registerd in the python files listed in this text file.

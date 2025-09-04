@@ -2,7 +2,8 @@ check
 absorbing.py
 calc_performance.py
 stacking.py
+FixedMeanStd.py
 
 choose_action is in:
-rainbowx.py
+rainbow.py
 calc_performance.py (parallele and sequential)

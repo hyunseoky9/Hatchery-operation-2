@@ -12,7 +12,7 @@ def calc_performance(env, device, rms, fstack, policy, episodenum=1000, t_maxste
     For policy gradient methods, calculate performance using the policy network.
     """
     print('serial calc_performance called')
-    if env.envID in ['Hatchery3.2.2', 'Hatchery3.2.3']:
+    if env.envID in ['Hatchery3.2.2', 'Hatchery3.2.3','Hatchery3.2.4']:
         actiondist = np.zeros(len(env.actionspace_dim)) # distribution of actions taken
         actiondistcount = 0
     avgrewards = 0
@@ -31,7 +31,7 @@ def calc_performance(env, device, rms, fstack, policy, episodenum=1000, t_maxste
                 s = torch.as_tensor(stack.copy(), dtype=torch.float32, device=device).unsqueeze(0)
                 action = policy(s)
                 action = action.cpu().numpy().squeeze(0)
-                if env.envID in ['Hatchery3.2.2', 'Hatchery3.2.3']:
+                if env.envID in ['Hatchery3.2.2', 'Hatchery3.2.3','Hatchery3.2.4']:
                     actiondist += action
                     actiondistcount += 1
             _, reward, done, _ = env.step(action)
@@ -40,7 +40,7 @@ def calc_performance(env, device, rms, fstack, policy, episodenum=1000, t_maxste
                 done = True
             t += 1
         avgrewards += rewards
-    if env.envID in ['Hatchery3.2.2', 'Hatchery3.2.3']:
+    if env.envID in ['Hatchery3.2.2', 'Hatchery3.2.3','Hatchery3.2.4']:
         actiondist = actiondist/actiondistcount
         if actiondist[0] is np.nan:
             foo = 0

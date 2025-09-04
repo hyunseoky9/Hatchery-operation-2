@@ -21,3 +21,4 @@ pomdp/
 __pycache__/
 *.pyc
 *.pyo
+synthetic_genotypes/
