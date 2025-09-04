@@ -88,7 +88,7 @@ class Hatchery3_2_3:
         self.larvaecollection_max = paramdf['larvaecollection_max'][self.parset] # maximum number of larvae that can be collected 
         self.sc = np.array([paramdf['s1'][self.parset],paramdf['s2'][self.parset],paramdf['s3'][self.parset]]) # cohort survival rate by age group
         self.rlen = np.array([paramdf['angolen'][self.parset], paramdf['isllen'][self.parset], paramdf['salen'][self.parset]]) # reach length in km
-        self.dth = 150 # density threshold (fish/km)
+        self.dth = 10 # density threshold (fish/km)
         self.Nth_local = self.rlen* self.dth
         self.Nth = np.sum(self.Nth_local)
         self.c = 3
@@ -112,11 +112,11 @@ class Hatchery3_2_3:
             self.paramsampleidx = None # initiate sample idx.
 
         # start springflow simulation model and springflow-to-"Larval carrying capacity" model.
-        #self.flowmodel = AR1_normalized()
-        self.flowmodel = whitenoise_normalized()
-        #self.Otowi_minus_ABQ_springflow = self.flowmodel.constants[0] - self.flowmodel.constants[1] # difference between Otowi and ABQ springflow
-        #self.Otowi_minus_SA_springflow = self.flowmodel.constants[0] - self.flowmodel.constants[2] # difference between Otowi and San Acacia springflow
-        self.ABQ_minus_SA_springflow = self.flowmodel.constants[0] - self.flowmodel.constants[1] # difference between ABQ and San Acacia springflow
+        self.flowmodel = AR1_normalized()
+        #self.flowmodel = whitenoise_normalized()
+        self.Otowi_minus_ABQ_springflow = self.flowmodel.constants[0] - self.flowmodel.constants[1] # difference between Otowi and ABQ springflow
+        self.Otowi_minus_SA_springflow = self.flowmodel.constants[0] - self.flowmodel.constants[2] # difference between Otowi and San Acacia springflow
+        #self.ABQ_minus_SA_springflow = self.flowmodel.constants[0] - self.flowmodel.constants[1] # difference between ABQ and San Acacia springflow
         self.LC_prediction_method = LC_prediction_method # 0=HMM, 1=GAM
         if self.LC_prediction_method == 0: # HMM
             self.LC_ABQ = pd.read_csv('springflow2LC_hmm_ABQ.csv')
@@ -183,7 +183,7 @@ class Hatchery3_2_3:
         self.AVGage_of_age2plus = 2*(1/(1+self.avgsa)) + 3*(self.avgsa/(1+self.avgsa)) # assume that the fish only lives till age 3
         
         # number of broodstock used for producing maximum capacity. Assumes maximum capacity is produced every year.
-        self.stockreadyfish_per_female = np.median([645.4969697,962.1485714,743.7636364,354.9875,634.92]) # first four values from bio park, 5th value from dexter. 
+        self.stockreadyfish_per_female = 1000 #np.median([645.4969697,962.1485714,743.7636364,354.9875,634.92]) # first four values from bio park, 5th value from dexter. 
         self.Nb = 2*self.maxcap/self.stockreadyfish_per_female # the value 1000 is Thomas' ballpark estimate of stock-ready fish produced per female #  2*self.maxcap/self.fc[1]
         # the value 1000 is Thomas' ballpark estimate of stock-ready fish produced per female
 
@@ -392,8 +392,8 @@ class Hatchery3_2_3:
             N1_next = np.minimum((N0+N1)*np.exp(-215*M1)*((1-delfall) + self.tau*delfall + (1 - self.tau)*self.r1*self.phifall),np.ones(self.n_reach)*self.N1minmax[1])
             # hydrological stuff
             q_next = self.flowmodel.nextflow(q) # springflow and forecast in spring
-            #q_next = q_next[0][0]
-            q_next = q_next[0]
+            q_next = q_next[0][0]
+            #q_next = q_next[0]
 
             # Ne calculation
             #Ne_CF, _, _ = self.NeCalc0(N0CF,N1,p,self.Nb,genT,kappa,0) # Ne if no stocking had been done
@@ -597,10 +597,10 @@ class Hatchery3_2_3:
             saLC_error = np.clip(np.random.normal(0, self.LC_SA['std']), -1.96*self.LC_SA['std'], 1.96*self.LC_SA['std'])
             if self.discset == -1:
                 # get springflow at ABQ and SA for given springflow at Otowi
-                #abqsf = np.minimum(np.maximum(q - self.Otowi_minus_ABQ_springflow, self.flowmodel.allowedmin[1]), self.flowmodel.allowedmax[1])
-                #sasf = np.minimum(np.maximum(q - self.Otowi_minus_SA_springflow, self.flowmodel.allowedmin[2]), self.flowmodel.allowedmax[2])
-                abqsf = np.minimum(np.maximum(q, self.flowmodel.allowedmin[0]), self.flowmodel.allowedmax[0])
-                sasf = np.minimum(np.maximum(q - self.ABQ_minus_SA_springflow, self.flowmodel.allowedmin[1]), self.flowmodel.allowedmax[1])
+                abqsf = np.minimum(np.maximum(q - self.Otowi_minus_ABQ_springflow, self.flowmodel.allowedmin[1]), self.flowmodel.allowedmax[1])
+                sasf = np.minimum(np.maximum(q - self.Otowi_minus_SA_springflow, self.flowmodel.allowedmin[2]), self.flowmodel.allowedmax[2])
+                #abqsf = np.minimum(np.maximum(q, self.flowmodel.allowedmin[0]), self.flowmodel.allowedmax[0])
+                #sasf = np.minimum(np.maximum(q - self.ABQ_minus_SA_springflow, self.flowmodel.allowedmin[1]), self.flowmodel.allowedmax[1])
 
                 # predict the LC using the GAM model
                 angoLC = np.maximum(self.LC_ABQ['model'].predict(abqsf) + angoLC_error, 0) # make sure LC is not negative

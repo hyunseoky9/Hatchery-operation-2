@@ -112,12 +112,20 @@ class Hatchery3_2_4:
             self.paramsampleidx = None # initiate sample idx.
 
         # start springflow simulation model and springflow-to-"Larval carrying capacity" model.
-        self.flowmodel = AR1_normalized()
+        ##self.flowmodel = AR1_normalized()
         #self.flowmodel = whitenoise_normalized()
+        ##self.Otowi_minus_ABQ_springflow = self.flowmodel.constants[0] - self.flowmodel.constants[1] # difference between Otowi and ABQ springflow
+        ##self.Otowi_minus_SA_springflow = self.flowmodel.constants[0] - self.flowmodel.constants[2] # difference between Otowi and San Acacia springflow
+        #self.ABQ_minus_SA_springflow = self.flowmodel.constants[0] - self.flowmodel.constants[1] # difference between ABQ and San Acacia springflow
+        #self.LC_prediction_method = LC_prediction_method # 0=HMM, 1=GAM
+
+        self.flowmodel = AR1_normalized()
+        self.flowmodel2 = whitenoise_normalized()
         self.Otowi_minus_ABQ_springflow = self.flowmodel.constants[0] - self.flowmodel.constants[1] # difference between Otowi and ABQ springflow
         self.Otowi_minus_SA_springflow = self.flowmodel.constants[0] - self.flowmodel.constants[2] # difference between Otowi and San Acacia springflow
-        #self.ABQ_minus_SA_springflow = self.flowmodel.constants[0] - self.flowmodel.constants[1] # difference between ABQ and San Acacia springflow
+        self.ABQ_minus_SA_springflow = self.flowmodel2.constants[0] - self.flowmodel2.constants[1] # difference between ABQ and San Acacia springflow
         self.LC_prediction_method = LC_prediction_method # 0=HMM, 1=GAM
+
         if self.LC_prediction_method == 0: # HMM
             self.LC_ABQ = pd.read_csv('springflow2LC_hmm_ABQ.csv')
             self.LC_SA = pd.read_csv('springflow2LC_hmm_San Acacia.csv')
@@ -598,10 +606,10 @@ class Hatchery3_2_4:
             if self.discset == -1: # continuous
                 # get springflow at ABQ and SA for given springflow at Otowi
                 # get springflow at ABQ and SA for given springflow at Otowi
-                #abqsf = np.minimum(np.maximum(q - self.Otowi_minus_ABQ_springflow, self.flowmodel.allowedmin[1]), self.flowmodel.allowedmax[1])
-                #sasf = np.minimum(np.maximum(q - self.Otowi_minus_SA_springflow, self.flowmodel.allowedmin[2]), self.flowmodel.allowedmax[2])
-                abqsf = np.minimum(np.maximum(self.states['q'], self.flowmodel.allowedmin[0]), self.flowmodel.allowedmax[0])
-                sasf = np.minimum(np.maximum(self.states['q'] - self.ABQ_minus_SA_springflow, self.flowmodel.allowedmin[1]), self.flowmodel.allowedmax[1])
+                abqsf = np.minimum(np.maximum(q - self.Otowi_minus_ABQ_springflow, self.flowmodel.allowedmin[1]), self.flowmodel.allowedmax[1])
+                sasf = np.minimum(np.maximum(q - self.Otowi_minus_SA_springflow, self.flowmodel.allowedmin[2]), self.flowmodel.allowedmax[2])
+                #abqsf = np.minimum(np.maximum(self.states['q'], self.flowmodel.allowedmin[0]), self.flowmodel.allowedmax[0])
+                #sasf = np.minimum(np.maximum(self.states['q'] - self.ABQ_minus_SA_springflow, self.flowmodel.allowedmin[1]), self.flowmodel.allowedmax[1])
 
                 # get the index of the springflow in the LC to springflow mapping table
                 abqsf_idx = np.round((abqsf - self.LC_ABQ['springflow'][0])/(self.LC_ABQ['springflow'].iloc[-1] - self.LC_ABQ['springflow'][0]) * (len(self.LC_ABQ['springflow']) - 1)).astype(int)
@@ -627,6 +635,7 @@ class Hatchery3_2_4:
                 sasf = np.minimum(np.maximum(q - self.Otowi_minus_SA_springflow, self.flowmodel.allowedmin[2]), self.flowmodel.allowedmax[2])
                 #abqsf = np.minimum(np.maximum(q, self.flowmodel.allowedmin[0]), self.flowmodel.allowedmax[0])
                 #sasf = np.minimum(np.maximum(q - self.ABQ_minus_SA_springflow, self.flowmodel.allowedmin[1]), self.flowmodel.allowedmax[1])
+
 
                 # predict the LC using the GAM model
                 angoLC = np.maximum(self.LC_ABQ['model'].predict(abqsf) + angoLC_error, 0) # make sure LC is not negative
