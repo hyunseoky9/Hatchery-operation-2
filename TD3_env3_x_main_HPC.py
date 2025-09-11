@@ -3,7 +3,7 @@ from call_paramset import call_paramset, call_env
 
 if __name__ == "__main__":
     paramid = 10 # test id = 4
-    iteration_num = 10
+    iteration_num = 1
     hyperparameterization_set_filename = './hyperparamsets/Hatchery3.x TD3bests.csv'
     paramdflist = call_paramset(hyperparameterization_set_filename,paramid)
     tuneset = 1
