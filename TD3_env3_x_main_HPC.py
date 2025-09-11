@@ -1,8 +1,9 @@
 from TD3 import *
 from call_paramset import call_paramset, call_env
-
+import sys
 if __name__ == "__main__":
-    paramid = 10 # test id = 4
+    paramid = int(sys.argv[1]) # test id = 4
+    #paramid = 10 # test id = 4
     iteration_num = 1
     hyperparameterization_set_filename = './hyperparamsets/Hatchery3.x TD3bests.csv'
     paramdflist = call_paramset(hyperparameterization_set_filename,paramid)
