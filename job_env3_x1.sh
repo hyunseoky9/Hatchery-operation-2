@@ -1,4 +1,3 @@
-
 #!/bin/bash
 
 #SBATCH --job-name=TD3      ## Name of the job
