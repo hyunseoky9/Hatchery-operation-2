@@ -15,7 +15,7 @@ class Hatchery3_2_3:
     """
     Same as 3.2.2 but added a state showing the parameter version used in a simulation
     """
-    def __init__(self,initstate,parameterization_set,discretization_set,LC_prediction_method, param_uncertainty=0):
+    def __init__(self,initstate,parameterization_set,discretization_set,LC_prediction_method, param_uncertainty=0, Rinfo=None):
         """
         initstate: initial state of the environment. If None, it will be initialized to a random state.
         parameterization_set: index of the parameterization set to use.
@@ -91,7 +91,12 @@ class Hatchery3_2_3:
         self.dth = 10 # density threshold (fish/km)
         self.Nth_local = self.rlen* self.dth
         self.Nth = np.sum(self.Nth_local)
-        self.c = 3
+        
+        if Rinfo is None:
+            self.Rinfo = {'c':1, 'no_genetics':0}
+        else:
+            self.Rinfo = Rinfo
+        self.c = self.Rinfo['c']
         self.objective_type = 'soft focus2'
         print(f'Nth: {self.Nth}, Nth_local: {self.Nth_local}, c: {self.c}, objective_type: {self.objective_type}')
         self.extant = paramdf['extant'][self.parset] # reward for not being
@@ -112,11 +117,11 @@ class Hatchery3_2_3:
             self.paramsampleidx = None # initiate sample idx.
 
         # start springflow simulation model and springflow-to-"Larval carrying capacity" model.
-        self.flowmodel = AR1_normalized()
-        #self.flowmodel = whitenoise_normalized()
-        self.Otowi_minus_ABQ_springflow = self.flowmodel.constants[0] - self.flowmodel.constants[1] # difference between Otowi and ABQ springflow
-        self.Otowi_minus_SA_springflow = self.flowmodel.constants[0] - self.flowmodel.constants[2] # difference between Otowi and San Acacia springflow
-        #self.ABQ_minus_SA_springflow = self.flowmodel.constants[0] - self.flowmodel.constants[1] # difference between ABQ and San Acacia springflow
+        #self.flowmodel = AR1_normalized()
+        self.flowmodel = whitenoise_normalized()
+        #self.Otowi_minus_ABQ_springflow = self.flowmodel.constants[0] - self.flowmodel.constants[1] # difference between Otowi and ABQ springflow
+        #self.Otowi_minus_SA_springflow = self.flowmodel.constants[0] - self.flowmodel.constants[2] # difference between Otowi and San Acacia springflow
+        self.ABQ_minus_SA_springflow = self.flowmodel.constants[0] - self.flowmodel.constants[1] # difference between ABQ and San Acacia springflow
         self.LC_prediction_method = LC_prediction_method # 0=HMM, 1=GAM
         if self.LC_prediction_method == 0: # HMM
             self.LC_ABQ = pd.read_csv('springflow2LC_hmm_ABQ.csv')
@@ -133,6 +138,11 @@ class Hatchery3_2_3:
         ## get log(kappa) probability distribution and domain values
         with open('lkappa_dataset.pkl', 'rb') as handle:
             lkappa_dataset = pickle.load(handle)
+
+        if self.param_uncertainty:
+            with open('lkappa_allposterior_dataset.pkl', 'rb') as handle:
+                self.lkappa_allposterior = pickle.load(handle)
+
         self.lkappa_prob = lkappa_dataset['lkappaprob']
         self.angolkappa_midvalues = lkappa_dataset['angolkappa_midvalues']
         self.isllkappa_midvalues = lkappa_dataset['isllkappa_midvalues']
@@ -270,7 +280,7 @@ class Hatchery3_2_3:
         # Initialize state and observation
         self.state, self.obs = self.reset(initstate)
 
-    def reset(self, initstate=None):
+    def reset(self, initstate=None, paramsampleidx=None):
         if type(initstate) is not np.ndarray:
             initstate = np.ones(len(self.statevar_dim))*-1
         
@@ -318,7 +328,7 @@ class Hatchery3_2_3:
         new_obs.append(np.log(Neval+1))
         
         self.paramsampleidx = np.random.randint(0, self.param_uncertainty_df.shape[0]) #np.random.choice([178,3898]) #178 #np.random.randint(0, self.param_uncertainty_df.shape[0])
-        paramvals = self.parameter_reset() # resample parameters from the posterior distribution
+        paramvals = self.parameter_reset(paramsampleidx) # resample parameters from the posterior distribution
         #newparamver = 0 if self.paramsampleidx==178 else 1
         new_state.append(paramvals)
         new_obs.append(paramvals)
@@ -392,8 +402,8 @@ class Hatchery3_2_3:
             N1_next = np.minimum((N0+N1)*np.exp(-215*M1)*((1-delfall) + self.tau*delfall + (1 - self.tau)*self.r1*self.phifall),np.ones(self.n_reach)*self.N1minmax[1])
             # hydrological stuff
             q_next = self.flowmodel.nextflow(q) # springflow and forecast in spring
-            q_next = q_next[0][0]
-            #q_next = q_next[0]
+            #q_next = q_next[0][0]
+            q_next = q_next[0]
 
             # Ne calculation
             #Ne_CF, _, _ = self.NeCalc0(N0CF,N1,p,self.Nb,genT,kappa,0) # Ne if no stocking had been done
@@ -406,7 +416,11 @@ class Hatchery3_2_3:
             #    print(f'negative impact on Ne larger than positive impact on Ne: {(np.log(Ne_score)[0] - np.log(Ne_base) + np.log(Ne_next)[0] - np.log(Ne_CF)[0]):.3f}')
             # reward & done
             genetic_reward = (np.log(Ne_score)[0] - np.log(Ne_base)) #+ (np.log(Ne_next)[0] - np.log(Ne_CF)[0])
-            reward = np.sum(self.c/3*((Nr>self.Nth_local).astype(int))) + genetic_reward #np.sum(self.c/3*((Nr>self.popsize_1cpue).astype(int))) + genetic_reward #self.c + genetic_reward  #np.sum(c/3*((Nr>Nth_local).astype(int))) + ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])) # np.log(np.sum(N0_next+N1_next)) #1 + ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0]))  #100 + np.log(Ne_score)[0]   #self.extant +  #self.extant*(1/(1+np.exp(-0.001*(np.sum(N0+N1) - (np.log(1/0.01 - 1)/0.001) + self.Nth)))) # 0.001 = k, 0.01 = percentage of self.extant at Nth
+            persistence_reward = np.sum(self.c/3*((Nr>self.Nth_local).astype(int)))
+            if self.Rinfo['no_genetics']==1:
+                reward = persistence_reward
+            else:
+                reward = persistence_reward + genetic_reward
             done = False
             
             # update state & obs
@@ -597,10 +611,10 @@ class Hatchery3_2_3:
             saLC_error = np.clip(np.random.normal(0, self.LC_SA['std']), -1.96*self.LC_SA['std'], 1.96*self.LC_SA['std'])
             if self.discset == -1:
                 # get springflow at ABQ and SA for given springflow at Otowi
-                abqsf = np.minimum(np.maximum(q - self.Otowi_minus_ABQ_springflow, self.flowmodel.allowedmin[1]), self.flowmodel.allowedmax[1])
-                sasf = np.minimum(np.maximum(q - self.Otowi_minus_SA_springflow, self.flowmodel.allowedmin[2]), self.flowmodel.allowedmax[2])
-                #abqsf = np.minimum(np.maximum(q, self.flowmodel.allowedmin[0]), self.flowmodel.allowedmax[0])
-                #sasf = np.minimum(np.maximum(q - self.ABQ_minus_SA_springflow, self.flowmodel.allowedmin[1]), self.flowmodel.allowedmax[1])
+                #abqsf = np.minimum(np.maximum(q - self.Otowi_minus_ABQ_springflow, self.flowmodel.allowedmin[1]), self.flowmodel.allowedmax[1])
+                #sasf = np.minimum(np.maximum(q - self.Otowi_minus_SA_springflow, self.flowmodel.allowedmin[2]), self.flowmodel.allowedmax[2])
+                abqsf = np.minimum(np.maximum(q, self.flowmodel.allowedmin[0]), self.flowmodel.allowedmax[0])
+                sasf = np.minimum(np.maximum(q - self.ABQ_minus_SA_springflow, self.flowmodel.allowedmin[1]), self.flowmodel.allowedmax[1])
 
                 # predict the LC using the GAM model
                 angoLC = np.maximum(self.LC_ABQ['model'].predict(abqsf) + angoLC_error, 0) # make sure LC is not negative
@@ -799,10 +813,12 @@ class Hatchery3_2_3:
                 
             return Ne, Neh, New
 
-    def parameter_reset(self):
+    def parameter_reset(self, paramsampleidx=None):
         """
         reset the parameters of the model to the initial values.
         """
+        if paramsampleidx is not None:
+            self.paramsampleidx = paramsampleidx
         # reset 
         self.alpha = self.param_uncertainty_df['alpha'].iloc[self.paramsampleidx]
         self.beta = self.param_uncertainty_df['beta'].iloc[self.paramsampleidx]
@@ -825,4 +841,16 @@ class Hatchery3_2_3:
                                self.param_uncertainty_df['lMwmu_s'].iloc[self.paramsampleidx]])
         self.irphi = self.param_uncertainty_df['irphi'].iloc[self.paramsampleidx]
         paramset = np.concatenate(([self.alpha], [self.beta], self.mu, [self.sd], [self.beta_2], [self.tau], [self.r0], [self.r1], self.lM0mu, self.lM1mu, self.lMwmu, [self.irphi]))
+        # reset genetic model parameters
+        lkappa_dataset = self.lkappa_allposterior[self.paramsampleidx]
+        self.lkappa_prob = lkappa_dataset['lkappaprob']
+        self.angolkappa_midvalues = lkappa_dataset['angolkappa_midvalues']
+        self.isllkappa_midvalues = lkappa_dataset['isllkappa_midvalues']
+        A,B             = np.meshgrid(self.angolkappa_midvalues,
+                                    self.isllkappa_midvalues,
+                                    indexing='ij')
+        mask            = self.lkappa_prob > 1e-3            # keep only useful combos
+        self.kappa_exp  = np.exp(np.stack([A[mask], B[mask], B[mask]], axis=-1))  # (nκ,3)
+        self.kappa_prob = self.lkappa_prob[mask]             # (nκ,)
+
         return paramset

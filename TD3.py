@@ -325,7 +325,7 @@ class TD3():
                 if done:
                     break
             scores.append(score)
-            if i_episode % 100 == 0:
+            if i_episode % 500 == 0:
                 print(f"Episode {i_episode}")
 
             if i_episode % self.evaluation_interval == 0: # calculate average reward every evaluation interval episodes

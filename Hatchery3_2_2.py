@@ -17,7 +17,7 @@ class Hatchery3_2_2:
     Another fix from Hatchery3_2 is that calculating wild Ne uses only wild origin N0 (N0CF; N0 counter-factual). This prevents double dipping in the R-L equation
     ensuring that Ne,w in the R-L only includes wild-origin spawners. This was not possible in 3.2 because stocked fish were baked into N0 during fall timesteps (t=1,2,3)
     """
-    def __init__(self,initstate,parameterization_set,discretization_set,LC_prediction_method, param_uncertainty=0):
+    def __init__(self,initstate,parameterization_set,discretization_set,LC_prediction_method, param_uncertainty=0, Rinfo=None):
         """
         initstate: initial state of the environment. If None, it will be initialized to a random state.
         parameterization_set: index of the parameterization set to use.
@@ -93,7 +93,11 @@ class Hatchery3_2_2:
         self.dth = 100 # density threshold
         self.Nth_local = self.rlen* self.dth
         self.Nth = np.sum(self.Nth_local)
-        self.c = 5
+        if Rinfo is None:
+            self.Rinfo = {'c':1, 'no_genetics':0}
+        else:
+            self.Rinfo = Rinfo
+        self.c = self.Rinfo['c']
         self.objective_type = 'soft focus2'
         #print(f'Nth: {self.Nth}, Nth_local: {self.Nth_local}, c: {self.c}, objective_type: {self.objective_type}')
         self.extant = paramdf['extant'][self.parset] # reward for not being
@@ -135,6 +139,11 @@ class Hatchery3_2_2:
         ## get log(kappa) probability distribution and domain values
         with open('lkappa_dataset.pkl', 'rb') as handle:
             lkappa_dataset = pickle.load(handle)
+
+        if self.param_uncertainty:
+            with open('lkappa_allposterior_dataset.pkl', 'rb') as handle:
+                self.lkappa_allposterior = pickle.load(handle)
+
         self.lkappa_prob = lkappa_dataset['lkappaprob']
         self.angolkappa_midvalues = lkappa_dataset['angolkappa_midvalues']
         self.isllkappa_midvalues = lkappa_dataset['isllkappa_midvalues']
@@ -272,7 +281,7 @@ class Hatchery3_2_2:
         # Initialize state and observation
         self.state, self.obs = self.reset(initstate)
 
-    def reset(self, initstate=None):
+    def reset(self, initstate=None, paramsampleidx=None):
         if type(initstate) is not np.ndarray:
             initstate = np.ones(len(self.statevar_dim))*-1
         
@@ -322,7 +331,7 @@ class Hatchery3_2_2:
         # sample
         if self.param_uncertainty:
             self.paramsampleidx = np.random.randint(0, self.param_uncertainty_df.shape[0]) #np.random.choice([178,3898]) #178 #np.random.randint(0, self.param_uncertainty_df.shape[0])
-            paramvals = self.parameter_reset() # resample parameters from the posterior distribution
+            paramvals = self.parameter_reset(paramsampleidx) # resample parameters from the posterior distribution
 
         self.state = np.concatenate(new_state)
         self.obs = np.concatenate(new_obs)
@@ -408,7 +417,12 @@ class Hatchery3_2_2:
             #    print(f'negative impact on Ne larger than positive impact on Ne: {(np.log(Ne_score)[0] - np.log(Ne_base) + np.log(Ne_next)[0] - np.log(Ne_CF)[0]):.3f}')
             # reward & done
             genetic_reward = (np.log(Ne_score)[0] - np.log(Ne_base)) # + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])
-            reward = self.c + genetic_reward
+            persistence_reward = self.c
+
+            if self.Rinfo['no_genetics']==1:
+                reward = persistence_reward
+            else:
+                reward = persistence_reward + genetic_reward
             # np.sum(self.c/3*((Nr>self.Nth_local).astype(int))) + genetic_reward
             # self.c + genetic_reward 
             # np.sum(self.c/3*((Nr>self.popsize_1cpue).astype(int))) + genetic_reward 
@@ -779,7 +793,7 @@ class Hatchery3_2_2:
             grate         = self.sa[:,None] + b/2
             var_dg        = self.sa[:,None]*(1-self.sa[:,None]) + b/4 + recruitvar/4
             factor = (var_dg/(grate**2) * self.kappa_prob * self.combo_delfallprob[:,None]).sum()
-
+            #print(f'factor: {factor}, totN: {totN0+totN1}')
             New = (totN0+totN1)/factor
             New = np.array([New / genT]) # generation time adjusted wild Ne.
             return New, 0, New
@@ -793,6 +807,7 @@ class Hatchery3_2_2:
                 stocked_cont = np.sum(p) # stocked contribution
                 total_cont = np.sum(N0) # wild contribution
                 x = stocked_cont/total_cont
+                #print(f'x: {x}')
                 #effspawner = N0 + self.beta_2*N1 # effective number of spawners
                 #stocked_cont = np.sum((self.alpha*p)/(1 + self.alpha*effspawner/kappa)) # stocked fish contribution
                 #total_cont =  np.sum((self.alpha*(effspawner))/(1 + self.alpha*effspawner/kappa)) # wild fish contribution
@@ -805,10 +820,12 @@ class Hatchery3_2_2:
                 
             return Ne, Neh, New
 
-    def parameter_reset(self):
+    def parameter_reset(self, paramsampleidx=None):
         """
         reset the parameters of the model to the initial values.
         """
+        if paramsampleidx is not None:
+            self.paramsampleidx = paramsampleidx
         # reset 
         self.alpha = self.param_uncertainty_df['alpha'].iloc[self.paramsampleidx]
         self.beta = self.param_uncertainty_df['beta'].iloc[self.paramsampleidx]
@@ -831,4 +848,16 @@ class Hatchery3_2_2:
                                self.param_uncertainty_df['lMwmu_s'].iloc[self.paramsampleidx]])
         self.irphi = self.param_uncertainty_df['irphi'].iloc[self.paramsampleidx]
         paramset = np.concatenate(([self.alpha], [self.beta], self.mu, [self.sd], [self.beta_2], [self.tau], [self.r0], [self.r1], self.lM0mu, self.lM1mu, self.lMwmu, [self.irphi]))
+        # reset genetic model parameters
+        lkappa_dataset = self.lkappa_allposterior[self.paramsampleidx]
+        self.lkappa_prob = lkappa_dataset['lkappaprob']
+        self.angolkappa_midvalues = lkappa_dataset['angolkappa_midvalues']
+        self.isllkappa_midvalues = lkappa_dataset['isllkappa_midvalues']
+        A,B             = np.meshgrid(self.angolkappa_midvalues,
+                                    self.isllkappa_midvalues,
+                                    indexing='ij')
+        mask            = self.lkappa_prob > 1e-3            # keep only useful combos
+        self.kappa_exp  = np.exp(np.stack([A[mask], B[mask], B[mask]], axis=-1))  # (nκ,3)
+        self.kappa_prob = self.lkappa_prob[mask]             # (nκ,)
+
         return paramset

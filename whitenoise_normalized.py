@@ -37,7 +37,6 @@ class whitenoise_normalized:
             'allowed_flowmax': sanacaciadf['flowmax']*1.1
         }
 
-
     def nextflow(self,q):
         '''
         Generate the next time step of flow for both gages.
