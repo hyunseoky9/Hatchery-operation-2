@@ -383,5 +383,5 @@ class TD3():
         with open(param_file_path, 'w') as param_file:
             for key, value in self.paramdf.items():
                 param_file.write(f"{key}: {value}\n")
-
-        return self.actor_local, inttestscores
+        sorted_scores = np.sort(inttestscores)[::-1]
+        return self.actor_local, sorted_scores
