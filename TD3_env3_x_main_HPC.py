@@ -1,12 +1,15 @@
+import pandas as pd
 from TD3 import *
 from call_paramset import call_paramset, call_env
 import sys
 if __name__ == "__main__":
     paramid = int(sys.argv[1]) # test id = 4
     #paramid = 10 # test id = 4
-    iteration_num = 1
+    iteration_num = 10
     hyperparameterization_set_filename = './hyperparamsets/Hatchery3.x TD3bests.csv'
     paramdflist = call_paramset(hyperparameterization_set_filename,paramid)
+    best_scores = []
+    seeds = []
     tuneset = 1
     for paramdf in paramdflist:
         for iteration in range(iteration_num):
@@ -27,8 +30,5 @@ if __name__ == "__main__":
             _, scores = agent.train()
             print(f"Tuneset {tuneset}, Iteration {iteration}: {scores}")
         tuneset += 1
-
-
-
-
-
+    seedsNscores = pd.DataFrame({'seed': seeds, 'best_score': best_scores})
+    print(seedsNscores)
