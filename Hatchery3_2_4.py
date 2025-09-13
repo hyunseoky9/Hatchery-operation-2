@@ -435,9 +435,11 @@ class Hatchery3_2_4:
         #    print(f'negative impact on Ne larger than positive impact on Ne: {(np.log(Ne_score)[0] - np.log(Ne_base) + np.log(Ne_next)[0] - np.log(Ne_CF)[0]):.3f}')
         # reward & done
         if Ne_score ==0 or Ne_base==0:
-            genetic_reward = (np.log(Ne_score+1)[0] - np.log(Ne_base+1))
+            #genetic_reward = (np.log(Ne_score+1)[0] - np.log(Ne_base+1))
+            genetic_reward = np.log(Ne_score+1)[0]
         else:
-            genetic_reward = (np.log(Ne_score)[0] - np.log(Ne_base)) # + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])
+            #genetic_reward = (np.log(Ne_score)[0] - np.log(Ne_base)) # + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])
+            genetic_reward = np.log(Ne_score)[0]
         persistence_reward = np.sum(self.c/3*((Nr_spring>self.Nth_local).astype(int)))
         extra_info['genetic_reward'] = genetic_reward
         extra_info['persistence_reward'] = persistence_reward
