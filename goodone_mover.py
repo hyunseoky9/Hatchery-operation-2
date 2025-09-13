@@ -4,7 +4,7 @@ import os
 # sys.argv[1] should be a spring representation of a list of seeds, e.g., "[1, 2, 3]"
 seeds = eval(sys.argv[1])
 algo = 'TD3'
-paramset = 9
+paramset = 14
 good_one_dir = f'./{algo} results/good_ones'
 for seed in seeds:
     dirpath = f'./{algo} results/seed{seed}_paramset{paramset}'

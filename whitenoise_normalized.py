@@ -14,11 +14,13 @@ class whitenoise_normalized:
             abqdf = pickle.load(handle)
         with open('white_noise_params_San Acacia.pkl', 'rb') as handle:
             sanacaciadf = pickle.load(handle)
-
+        with open('white_noise_params_Otowi.pkl', 'rb') as handle:
+            otowidf = pickle.load(handle)
         self.flowmin = np.array([abqdf['flowmin'], sanacaciadf['flowmin']])
         self.flowmax = np.array([abqdf['flowmax'], sanacaciadf['flowmax']])
         self.allowedmin = self.flowmin * 0.9
         self.allowedmax = self.flowmax * 1.1
+        self.otowiconstant = otowidf['constant']
         self.constants = np.array([abqdf['constant'], sanacaciadf['constant']])
         self.abqparams = {
             'mu': abqdf['mu'],
@@ -36,6 +38,22 @@ class whitenoise_normalized:
             'allowed_flowmin': sanacaciadf['flowmin']*0.9,
             'allowed_flowmax': sanacaciadf['flowmax']*1.1
         }
+        self.otowiparams = {
+            'mu': otowidf['mu'],
+            'std': otowidf['std'],
+            'flowmin': otowidf['flowmin'],
+            'flowmax': otowidf['flowmax'],
+            'allowed_flowmin': otowidf['flowmin']*0.9,
+            'allowed_flowmax': otowidf['flowmax']*1.1
+        }
+        # load forecast bias parameters
+        with open('nrcs_forecast_bias_stats.pkl', 'rb') as handle:
+            self.bias_params = pickle.load(handle)
+        self.bias_mean = self.bias_params['mean_bias']
+        self.bias_std = self.bias_params['std_bias']
+        self.bias_95interval = [self.bias_mean - 1.96 * self.bias_std, self.bias_mean + 1.96 * self.bias_std]
+
+
 
     def nextflow(self,q):
         '''
@@ -43,8 +61,31 @@ class whitenoise_normalized:
         * it's actually wrong to model two gages separately. but the RL environment (Hatchery3.x) only takes the first argument
         '''
         abq_initial = np.random.normal(self.abqparams['mu'], self.abqparams['std'])
-        sa_initial = np.random.normal(self.saparams['mu'], self.saparams['std'])
         # back transform
         abq_flow = expit(abq_initial) * (self.abqparams['allowed_flowmax'] - self.abqparams['allowed_flowmin']) + self.abqparams['allowed_flowmin']
-        sa_flow = expit(sa_initial) * (self.saparams['allowed_flowmax'] - self.saparams['allowed_flowmin']) + self.saparams['allowed_flowmin']
-        return np.array([abq_flow, sa_flow])
+        return np.array([abq_flow, -1]) # -1 is just a placeholder
+        
+    def nextflowNforecast(self):
+        '''Generate the next time step of flow for both gages and apply forecast bias.
+        '''
+        abq_initial = np.random.normal(self.abqparams['mu'], self.abqparams['std'])
+        # back transform
+        abq_flow = expit(abq_initial) * (self.abqparams['allowed_flowmax'] - self.abqparams['allowed_flowmin']) + self.abqparams['allowed_flowmin']
+
+        # otowi forecast with bias
+        bias = np.clip(
+            np.random.normal(loc=self.bias_mean, scale=self.bias_std, size=1),
+            self.bias_95interval[0],
+            self.bias_95interval[1]
+        )
+
+        # get otowi flow from abq flow using constant difference
+        otowi_flow = abq_flow - (self.constants[0] - self.otowiconstant)
+        # apply forecast bias
+        forecast = otowi_flow + bias
+        # make sure forecast is within range
+        forecast = np.maximum(forecast, self.otowiparams['flowmin'] - self.bias_95interval[1])
+        forecast = np.minimum(forecast, self.otowiparams['flowmax'] + self.bias_95interval[1])
+        forecast = np.max(forecast, 0)
+    
+        return np.array([abq_flow, forecast])
