@@ -14,15 +14,16 @@ import pickle
 import os
 import copy
 from ddpg_actor import Actor
-from ddpg_actor_sigsoft import Actor_sigsoft
 from setup_logger import setup_logger
 from stacking2 import *
 from RunningMeanStd import RunningMeanStd
 from FixedMeanStd import FixedMeanStd
 from calc_performance2 import calc_performance
 from calc_performance2_parallel import calc_performance_parallel
-class TD3():
-    """Reinforcement Learning agent that learns using TD3."""
+class TD3_2():
+    """Reinforcement Learning agent that learns using TD3.
+    Specifically tailored for production action in hatchery 3.3.x environment with masking ability and divided softmax. 
+    """
     def __init__(self, env, paramdf, meta):
         """
         env: Environment object that provides the state and action space.
@@ -158,12 +159,8 @@ class TD3():
         # setting up the network, exploration noise, and replay buffer
 
         ## Actor (Policy) Model
-        if 'Hatchery3.3' in self.env.envID: # uses sigmoid + softmax output layer
-            self.actor_local = Actor_sigsoft(self.state_size*self.fstack, self.action_size, self.actor_hidden_size, self.actor_hidden_num,
-                                    self.actor_lrdecayrate, self.actor_lr, self.fstack).to(self.device)
-        else: # uses softmax output layer
-            self.actor_local = Actor(self.state_size*self.fstack, self.action_size, self.actor_hidden_size, self.actor_hidden_num,
-                                    self.actor_lrdecayrate, self.actor_lr, self.fstack).to(self.device)
+        self.actor_local = Actor(self.state_size*self.fstack, self.action_size, self.actor_hidden_size, self.actor_hidden_num,
+                                  self.actor_lrdecayrate, self.actor_lr, self.fstack).to(self.device)
         self.actor_target  = copy.deepcopy(self.actor_local).to(self.device)
 
 
@@ -249,7 +246,7 @@ class TD3():
             logits_next = self.actor_target.body(next_states) # shape [B, K]
             noise = torch.normal(mean=0.0,std=self.target_noise,size=logits_next.shape,device=logits_next.device) # Gaussian exploration noise
             noise = noise.clamp(-self.target_noise_clip,self.target_noise_clip) # clip the noise element-wise
-            actions_next = self.actor_target.process_logits(logits_next, noise)
+            actions_next = torch.softmax(logits_next + noise, dim=-1)  # shape [B, K]
             q1_targets_next = self.critic1_target(next_states, actions_next) # there should be 2 critics.
             q2_targets_next = self.critic2_target(next_states, actions_next) # there should be 2 critics.
             q_targets      = rewards + self.gamma * torch.min(q1_targets_next, q2_targets_next) * (1 - dones)

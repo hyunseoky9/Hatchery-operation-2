@@ -202,7 +202,6 @@ class Hatchery3_2_5:
         
         # number of broodstock used for producing maximum capacity. Assumes maximum capacity is produced every year.
         self.stockreadyfish_per_female = np.median([645.4969697,962.1485714,743.7636364,354.9875,634.92]) # first four values from bio park, 5th value from dexter. 
-        self.Nb = 2*self.maxcap/self.stockreadyfish_per_female # the value 1000 is Thomas' ballpark estimate of stock-ready fish produced per female #  2*self.maxcap/self.fc[1]
         # the value 1000 is Thomas' ballpark estimate of stock-ready fish produced per female
 
         # observation related parameters
@@ -318,13 +317,13 @@ class Hatchery3_2_5:
         if self.discset == -1:
             qvalNforecast = self.flowmodel.nextflowNforecast()
             qval = np.array([np.log(qvalNforecast[0] + 1)])
-            forecast = np.array([qvalNforecast[1]])
+            otowi_forecast = np.array([qvalNforecast[1][1]])
         else:
             qval = random.choices(list(np.arange(0,len(self.states['q']))), k = self.statevar_dim[3])
 
         # Nh
         if initstate[2] == -1:
-            production = self.production_target(forecast) # production target based on the initiated springflow forecast
+            production = self.production_target(otowi_forecast) # production target based on the initiated springflow forecast
             new_state.append(np.array([np.log(production + 1)])) 
             new_obs.append(np.array([np.log(production + 1)]))
         else:
@@ -391,13 +390,14 @@ class Hatchery3_2_5:
 
         # demographic stuff (stocking and winter survival)
         Mw = np.exp(self.lMwmu) #np.exp(np.random.normal(self.lMwmu, self.lMwsd))
-        stockedNsurvived = a*Nh*self.irphi
+        stockedNsurvived = a*Nh[0]*self.irphi
         N0CF = N0.copy()*np.exp(-150*Mw) # counterfactual N0, if no stocking had been done. Also equivalent to wild-origin spawners.
         N0 = N0 + stockedNsurvived # stocking san acacia (t=3) in the fall
         N0 = np.minimum(N0*np.exp(-150*Mw),np.ones(self.n_reach)*self.N0minmax[1]) # stocking san acacia (t=3) in the fall
         N1 = N1*np.exp(-150*Mw)
         p = stockedNsurvived*np.exp(-150*Mw) # Total number of fish stocked in a season that make it to breeding season
-        Ne_score, Neh, Ne_base = self.NeCalc0(N0,N1,p, self.Nb,None,None,1)
+        Nb = 2*Nh[0]/self.stockreadyfish_per_female
+        Ne_score, Neh, Ne_base = self.NeCalc0(N0,N1,p,Nb,None,None,1)
         extra_info['Ne_score'] = Ne_score # Ne_score is the Ne until you stock in the next fall.
         # demographic stuff (reproductin and summer survival)
 
@@ -429,7 +429,7 @@ class Hatchery3_2_5:
             # Ne calculation
             #Ne_CF, _, _ = self.NeCalc0(N0CF,N1,p,self.Nb,genT,kappa,0) # Ne if no stocking had been done
             if np.sum(N0CF+N1)>0:
-                Ne_next, _, _ = self.NeCalc0(N0CF,N1,p,self.Nb,genT,kappa,0) # N0CF is used because we need to keep track of the wild effective population size. 
+                Ne_next, _, _ = self.NeCalc0(N0CF,N1,None,None,genT,kappa,0) # N0CF is used because we need to keep track of the wild effective population size. 
             else: 
                 Ne_next = np.array([0])
             extra_info['Ne'] = Ne_next # Ne_wild is the Ne until you stock in the next fall.
@@ -447,9 +447,10 @@ class Hatchery3_2_5:
         qNforecast = self.flowmodel.nextflowNforecast() # springflow and forecast in spring
         #q_next = q_next[0][0]
         q_next = qNforecast[0]
-        forecast = np.array([qNforecast[1]]) # springflow forecast
+        forecast = np.array([qNforecast[1][1]]) # otowi springflow forecast
         # hatchery production for next year
         Nh_next = np.array([self.production_target(forecast)]) # production target based on the springflow forecast
+        #print(f'qnext: {np.round(q_next*8.107*(10**-7),3)}, forecast: {np.round(forecast[0]*8.107*(10**-7),3)}, production: {Nh_next[0]:.2f}')
         #extra_info['Ne_imp'] = ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])) # Ne_CF is the Ne if no stocking had been done.
         #if ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])) >=0:
         #    print(f'negative impact on Ne smaller than positive impact on Ne: {(np.log(Ne_score)[0] - np.log(Ne_base) + np.log(Ne_next)[0] - np.log(Ne_CF)[0]):.3f}')
@@ -496,13 +497,6 @@ class Hatchery3_2_5:
             Ne_next_idx = [self._discretize_idx(Ne_next, self.states['Ne'])]
             self.state = np.concatenate([N0_next_idx, N1_next_idx , q_next_idx, Ne_next_idx]).astype(int)
             self.obs = np.concatenate([N0_next_idx, N1_next_idx, q_next_idx, Ne_next_idx]).astype(int)
-        logpopsize = np.log((np.exp(self.state[self.sidx['logN0']])-1) + (np.exp(self.state[self.sidx['logN1']])-1) + 1)
-        logpop = logpopsize / np.log(self.N0minmax[1])
-        #if np.any(logpop ==0):
-        #    foo = 0
-        #    foo = 0
-
-
         return self.obs, reward, done, extra_info
 
     def state_discretization(self, discretization_set):

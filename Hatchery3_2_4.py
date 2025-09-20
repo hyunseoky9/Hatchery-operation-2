@@ -101,7 +101,7 @@ class Hatchery3_2_4:
         self.extant = paramdf['extant'][self.parset] # reward for not being
         self.prodcost = paramdf['prodcost'][self.parset] # production cost in spring if deciding to produce
         self.unitcost = paramdf['unitcost'][self.parset] # unit production cost.
-        self.maxcap = paramdf['maxcap'][self.parset] # maximum carrying capacity of the hatchery
+        self.maxcap = 200000 #paramdf['maxcap'][self.parset] # maximum carrying capacity of the hatchery
         self.Ne2Nratio = paramdf['Ne2Nratio'][self.parset] # ratio of effective population size to total population size in hatchery
         # for monitoring simulation (alternate parameterization for )
         self.sampler = self.sz
@@ -473,13 +473,6 @@ class Hatchery3_2_4:
             Ne_next_idx = [self._discretize_idx(Ne_next, self.states['Ne'])]
             self.state = np.concatenate([N0_next_idx, N1_next_idx , q_next_idx, Ne_next_idx]).astype(int)
             self.obs = np.concatenate([N0_next_idx, N1_next_idx, q_next_idx, Ne_next_idx]).astype(int)
-        logpopsize = np.log((np.exp(self.state[self.sidx['logN0']])-1) + (np.exp(self.state[self.sidx['logN1']])-1) + 1)
-        logpop = logpopsize / np.log(self.N0minmax[1])
-        #if np.any(logpop ==0):
-        #    foo = 0
-        #    foo = 0
-
-
         return self.obs, reward, done, extra_info
 
     def state_discretization(self, discretization_set):

@@ -82,10 +82,14 @@ class whitenoise_normalized:
         # get otowi flow from abq flow using constant difference
         otowi_flow = abq_flow - (self.constants[0] - self.otowiconstant)
         # apply forecast bias
-        forecast = otowi_flow + bias
+        otowi_forecast = otowi_flow + bias
+        abq_forecast =  abq_flow + bias
         # make sure forecast is within range
-        forecast = np.maximum(forecast, self.otowiparams['flowmin'] - self.bias_95interval[1])
-        forecast = np.minimum(forecast, self.otowiparams['flowmax'] + self.bias_95interval[1])
-        forecast = np.max(forecast, 0)
-    
-        return np.array([abq_flow, forecast])
+        otowi_forecast = np.maximum(otowi_forecast, self.otowiparams['flowmin'] + self.bias_95interval[0])
+        otowi_forecast = np.minimum(otowi_forecast, self.otowiparams['flowmax'] + self.bias_95interval[1])
+        otowi_forecast = np.maximum(otowi_forecast, 0)
+        abq_forecast = np.maximum(abq_forecast, self.abqparams['flowmin']) # i don't subtract bias interval like in otowi forecast because the value can go negative.
+        abq_forecast = np.minimum(abq_forecast, self.abqparams['flowmax']) 
+        abq_forecast = np.maximum(abq_forecast, 0)
+        forecast = np.array([abq_forecast, otowi_forecast]).T[0]
+        return [abq_flow, forecast]
