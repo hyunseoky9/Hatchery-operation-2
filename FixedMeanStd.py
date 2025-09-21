@@ -40,8 +40,12 @@ class FixedMeanStd:
         self.rolloutnum = 0
 
     def normalize(self, x):
-        if 'Hatchery3.3' in self.envID:
-            x[0:-1] = (x[0:-1] - self.mean[0:-1]) / np.sqrt(self.var[0:-1] + 1e-8)
-            return x
+        # check if there is a variable self.envID
+        if hasattr(self, 'envID'):
+            if 'Hatchery3.3' in self.envID:
+                x[0:-1] = (x[0:-1] - self.mean[0:-1]) / np.sqrt(self.var[0:-1] + 1e-8)
+                return x
+            else:
+                return (x - self.mean) / np.sqrt(self.var + 1e-8)
         else:
             return (x - self.mean) / np.sqrt(self.var + 1e-8)

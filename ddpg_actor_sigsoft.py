@@ -42,8 +42,8 @@ class Actor_sigsoft(nn.Module):
     
     def forward(self, x):
         logits = self.body(x)
-        logits[0] = torch.sigmoid(logits[0])  # apply sigmoid to the first output
-        logits[1:] = torch.softmax(logits[1:], dim=-1)  # apply softmax to the rest
+        logits[:,0] = torch.sigmoid(logits[:,0])  # apply sigmoid to the first output
+        logits[:,1:] = torch.softmax(logits[:,1:], dim=-1)  # apply softmax to the rest
         return logits
 
     def act(self, state, ou_process):
