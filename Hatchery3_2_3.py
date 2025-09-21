@@ -159,7 +159,7 @@ class Hatchery3_2_3:
         alphainterval = np.linspace(self.alpha - 1.96*np.sqrt(self.alphavar), self.alpha + 1.96*np.sqrt(self.alphavar), 11)
         # calculate the probability for each bin
         self.alphaprob = norm.cdf(alphainterval[1:], loc=self.alpha, scale=np.sqrt(self.alphavar)) - norm.cdf(alphainterval[:-1], loc=self.alpha, scale=np.sqrt(self.alphavar))
-        self.alpha_centers = (alphainterval[:-1] + alphainterval[1:]) / 2
+        self.alpha_centers = np.maximum((alphainterval[:-1] + alphainterval[1:]) / 2,0)
         self.alpha_vec  = np.hstack((self.alpha, self.alpha_centers))  # (nα,)
         ## get the probability distribution of river drying, delfall, and avg deldiff.
         bins = 5
@@ -852,5 +852,34 @@ class Hatchery3_2_3:
         mask            = self.lkappa_prob > 1e-3            # keep only useful combos
         self.kappa_exp  = np.exp(np.stack([A[mask], B[mask], B[mask]], axis=-1))  # (nκ,3)
         self.kappa_prob = self.lkappa_prob[mask]             # (nκ,)
+        # alpha_vec reset
+        alphainterval = np.linspace(self.alpha - 1.96*np.sqrt(self.alphavar), self.alpha + 1.96*np.sqrt(self.alphavar), 11)
+        self.alphaprob = norm.cdf(alphainterval[1:], loc=self.alpha, scale=np.sqrt(self.alphavar)) - norm.cdf(alphainterval[:-1], loc=self.alpha, scale=np.sqrt(self.alphavar))
+        self.alpha_centers = np.maximum((alphainterval[:-1] + alphainterval[1:]) / 2,0)
+        self.alpha_vec  = np.hstack((self.alpha, self.alpha_centers))  # (nα,)
+        # get sa and sj
+        bins = 5
+        intervals = np.linspace(0,1,bins+1) # bin boundaries
+        delfall_i = np.array([self.delfall[0,1],self.delfall[1,1]]) # isleta alpha beta
+        delfall_s = np.array([self.delfall[0,2],self.delfall[1,2]]) # san acacia alpha beta
+        delfallprob_i = beta.cdf(intervals[1:], a=delfall_i[0], b=delfall_i[1]) - beta.cdf(intervals[:-1], a=delfall_i[0], b=delfall_i[1])
+        delfallprob_s = beta.cdf(intervals[1:], a=delfall_s[0], b=delfall_s[1]) - beta.cdf(intervals[:-1], a=delfall_s[0], b=delfall_s[1])
+        delmid_values = (intervals[:-1] + intervals[1:]) / 2 # get the mid value for each bin
+        deldiffavg = np.zeros(self.n_reach)
+        deldiffavg[1:] = self.deldiff[0,1:] / np.sum(self.deldiff,axis=0)[1:] # average value for deldiff. angostura value is 0
+        M0 = np.exp(self.lM0mu)
+        M1 = np.exp(self.lM1mu)
+        Mw = np.exp(self.lMwmu)
+        combo = np.array(list(itertools.product(delmid_values, delmid_values)))
+        self.combo_delfallprob = np.array(list(itertools.product(delfallprob_i, delfallprob_s)))
+        self.combo_delfallprob = np.prod(self.combo_delfallprob, axis=1) # product of delfall probabilities
+        valididx = np.where(self.combo_delfallprob > 1e-2)[0] # only keep the combinations with probability greater than 1e-3
+        self.combo_delfallprob = self.combo_delfallprob[valididx] # only keep the valid combinations
+        delfall = np.column_stack((np.zeros(combo.shape[0]),combo))
+        delfall = delfall[valididx,:] # only keep the valid combinations
+        self.sj = np.exp(-124*M0 - 150*Mw)*((1 - delfall) + self.tau*delfall*deldiffavg + (1 - self.tau)*self.r0*np.mean(self.phidiff))
+        self.sa = np.exp(-124*M1 - 150*Mw)*((1 - delfall) + self.tau*delfall + (1 - self.tau)*self.r1*np.mean(self.phifall))
+        self.sj =  np.prod(self.sj,axis=1)**(1/self.sj.shape[1]) # geometric mean of sj
+        self.sa =  np.prod(self.sa,axis=1)**(1/self.sa.shape[1]) # geometric mean of sa
 
         return paramset
