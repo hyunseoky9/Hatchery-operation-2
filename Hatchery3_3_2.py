@@ -10,17 +10,12 @@ import os
 from AR1_normalized import AR1_normalized
 from whitenoise_normalized_otowi import whitenoise_normalized_otowi
 
-class Hatchery3_3_1:
+class Hatchery3_3_2:
     """
-    same as 3.2.6, but Bringing back spring production action
-    Action must now be an array of 5 elements: proportiof capacity produced + stocking proportion in angostura, isleta, and san acacia, and discarding
+    same as 3.3.1, but the two seasons are now fall and start of summer after recruitment instead of spring. 
     """
     def __init__(self,initstate,parameterization_set,discretization_set,LC_prediction_method, param_uncertainty=0, Rinfo=None):
-        """
-        same as 3.2.6, but adds spring production process, production is no longer fixed to max capacity. production follows the current strategy based on springflow forecast.
-        also the q is otowi flow and forecasts not angostura's flow.
-        """
-        self.envID = 'Hatchery3.3.1'
+        self.envID = 'Hatchery3.3.2'
         self.partial = True
         self.episodic = True
         self.absorbing_cut = True # has an absorbing state and the episode should be cut shortly after reaching it.
@@ -446,24 +441,11 @@ class Hatchery3_3_1:
             N1_next = N1
             Nh_next = np.array([0])
             Ne_next = Ne_score
-        else: # spring
+        else: # summer
             # demographic stuff (reproductin and summer survival)
 
             delfall = np.concatenate(([self.delfall[0][0]],np.random.beta(self.delfall[0][1:],self.delfall[1][1:])))
             deldiff = np.concatenate(([self.deldiff[0][0]],np.random.beta(self.deldiff[0][1:],self.deldiff[1][1:])))
-            L, abqsf, sasf = self.q2LC(q)
-            #extra_info['L'] = L
-            #extra_info['abqsf'] = abqsf
-            #extra_info['sasf'] = sasf
-            natural_capacity = np.random.normal(self.mu, self.sd)
-            kappa = np.exp(self.beta*(L - self.Lmean) + natural_capacity)
-            #extra_info['natural_capacity'] = natural_capacity
-            #extra_info['kappa'] = kappa
-
-            effspawner = N0 + self.beta_2*N1 # effective number of spawners
-            P1 = (self.alpha*N0)/(1 + self.alpha*effspawner/kappa) # number of recruits produced by age 1 fish that newly became adults
-            P2 = (self.alpha*self.beta_2*N1)/(1 + self.alpha*effspawner/kappa) # number of recruits produced by age 2+ fish
-            P = (self.alpha*effspawner)/(1 + self.alpha*effspawner/kappa)
             M0 = np.exp(np.random.normal(self.lM0mu, self.lM0sd))
             M1 = np.exp(np.random.normal(self.lM1mu, self.lM1sd))
             if np.sum(P)>0:
