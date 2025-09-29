@@ -334,7 +334,7 @@ class Hatchery3_3_1:
             qval = random.choices(list(np.arange(0,len(self.states['q']))), k = self.statevar_dim[3])
 
         # Nh
-        if initstate[2] == -1:
+        if initstate[3] == -1:
             production = self.production_target(otowi_forecast) # production target based on the initiated springflow forecast
             new_state.append(np.array([np.log(production + 1)])) 
             new_obs.append(np.array([np.log(production + 1)]))
@@ -377,7 +377,7 @@ class Hatchery3_3_1:
     def step(self, a, current_strategy = 0):
         """
         Take an action and return the next state, reward, done flag, and extra information.
-        a is a vector of 4, where the first three are stocking proportions in angostura, isleta, and san acacia, and the last one is the discard proportion.
+        a is a vector of 4, where the first is the proportion of production and the rest three are stocking proportions in angostura, isleta, and san acacia.
         current_strategy=1 takes the production action and stocking action based on the currently carried out heuristic stocking strategy.
         """
         extra_info = {}
@@ -423,10 +423,10 @@ class Hatchery3_3_1:
             # reward & done
             if Ne_score ==0 or Ne_base==0:
                 #genetic_reward = (np.log(Ne_score+1)[0] - np.log(Ne_base+1))
-                genetic_reward = np.log(Ne_score+1)[0]
+                genetic_reward = np.log(Ne_score[0]+1)
             else:
                 #genetic_reward = (np.log(Ne_score)[0] - np.log(Ne_base)) # + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])
-                genetic_reward = np.log(Ne_score)[0]
+                genetic_reward = np.log(Ne_score[0])
             persistence_reward = np.sum(self.c/3*((Nr_spring>self.Nth_local).astype(int)))
             extra_info['genetic_reward'] = genetic_reward
             extra_info['persistence_reward'] = persistence_reward
@@ -710,7 +710,7 @@ class Hatchery3_3_1:
         if forecast is not None:
             qhat = forecast
         else:
-            qhat = np.exp(np.array(self.obs)[self.oidx['logqhat']]) if self.discset == -1 else np.array([self.observations['qhat'][self.obs[self.oidx['qhat'][0]]]])
+            qhat = np.exp(np.array(self.obs)[self.oidx['Ologq']]) if self.discset == -1 else np.array([self.observations['qhat'][self.obs[self.oidx['qhat'][0]]]])
         qhat_kaf = qhat[0]/1233480.0 # convert cubic meter to kaf
         X = np.array([1,qhat_kaf])
         V = np.array([[1.662419546,-3.284657e-03],[-0.003284657,7.883848e-06]])

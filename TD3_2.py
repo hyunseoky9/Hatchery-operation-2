@@ -14,6 +14,8 @@ import pickle
 import os
 import copy
 from ddpg_actor import Actor
+from ddpg_actor_sigsoft import Actor_sigsoft
+from ddpg_actor_tanhsoft import Actor_tanhsoft
 from setup_logger import setup_logger
 from stacking2 import *
 from RunningMeanStd import RunningMeanStd
@@ -21,8 +23,8 @@ from FixedMeanStd import FixedMeanStd
 from calc_performance2 import calc_performance
 from calc_performance2_parallel import calc_performance_parallel
 class TD3_2():
-    """Reinforcement Learning agent that learns using TD3.
-    Specifically tailored for production action in hatchery 3.3.x environment with masking ability and divided softmax. 
+    """Same as TD3, but the critic sees an "effective action" where [a0, a0*A, a0*I, a0*S]. check to_effective_action function.
+    This function is used in the learn() method to convert the action before passing to the critic.
     """
     def __init__(self, env, paramdf, meta):
         """
@@ -159,8 +161,15 @@ class TD3_2():
         # setting up the network, exploration noise, and replay buffer
 
         ## Actor (Policy) Model
-        self.actor_local = Actor(self.state_size*self.fstack, self.action_size, self.actor_hidden_size, self.actor_hidden_num,
-                                  self.actor_lrdecayrate, self.actor_lr, self.fstack).to(self.device)
+        if 'Hatchery3.3' in self.env.envID: # uses sigmoid + softmax output layer
+            #self.actor_local = Actor_sigsoft(self.state_size*self.fstack, self.action_size, self.actor_hidden_size, self.actor_hidden_num,
+            #                        self.actor_lrdecayrate, self.actor_lr, self.fstack).to(self.device)
+            self.actor_local = Actor_tanhsoft(self.state_size*self.fstack, self.action_size, self.actor_hidden_size, self.actor_hidden_num,
+                                    self.actor_lrdecayrate, self.actor_lr, self.fstack).to(self.device)
+
+        else: # uses softmax output layer
+            self.actor_local = Actor(self.state_size*self.fstack, self.action_size, self.actor_hidden_size, self.actor_hidden_num,
+                                    self.actor_lrdecayrate, self.actor_lr, self.fstack).to(self.device)
         self.actor_target  = copy.deepcopy(self.actor_local).to(self.device)
 
 
@@ -246,14 +255,16 @@ class TD3_2():
             logits_next = self.actor_target.body(next_states) # shape [B, K]
             noise = torch.normal(mean=0.0,std=self.target_noise,size=logits_next.shape,device=logits_next.device) # Gaussian exploration noise
             noise = noise.clamp(-self.target_noise_clip,self.target_noise_clip) # clip the noise element-wise
-            actions_next = torch.softmax(logits_next + noise, dim=-1)  # shape [B, K]
-            q1_targets_next = self.critic1_target(next_states, actions_next) # there should be 2 critics.
-            q2_targets_next = self.critic2_target(next_states, actions_next) # there should be 2 critics.
+            actions_next = self.actor_target.process_logits(logits_next, noise)
+            actions_next_eff = to_effective_action(actions_next)  # <— NEW
+            q1_targets_next = self.critic1_target(next_states, actions_next_eff) # there should be 2 critics.
+            q2_targets_next = self.critic2_target(next_states, actions_next_eff) # there should be 2 critics.
             q_targets      = rewards + self.gamma * torch.min(q1_targets_next, q2_targets_next) * (1 - dones)
 
         # critic update
-        q1_expected   = self.critic1_local(states, actions)
-        q2_expected   = self.critic2_local(states, actions)
+        actions_eff = to_effective_action(actions)  # <— NEW
+        q1_expected   = self.critic1_local(states, actions_eff)
+        q2_expected   = self.critic2_local(states, actions_eff)
         critic1_loss  = F.mse_loss(q1_expected, q_targets)
         critic2_loss  = F.mse_loss(q2_expected, q_targets)
 
@@ -277,7 +288,8 @@ class TD3_2():
         if self.learn_step % self.policy_delay == 0:
             # actor update
             actions_pred = self.actor_local(states)
-            actor_loss   = -self.critic1_local(states, actions_pred).mean()
+            actions_pred_eff = to_effective_action(actions_pred)  # <— NEW
+            actor_loss   = -self.critic1_local(states, actions_pred_eff).mean()
             self.actor_opt.zero_grad()
             actor_loss.backward()
             self.actor_opt.step()
@@ -387,3 +399,9 @@ class TD3_2():
                 param_file.write(f"{key}: {value}\n")
         sorted_scores = np.sort(inttestscores)[::-1]
         return self.actor_local, sorted_scores
+    
+def to_effective_action(a: torch.Tensor) -> torch.Tensor:
+    # a: [B,4] = [a0, allocA, allocI, allocS]
+    a0 = a[:, :1]           # [B,1]
+    alloc = a[:, 1:]        # [B,3], sums to 1
+    return torch.cat([a0, a0 * alloc], dim=-1)   # [B,4] = [a0, a0*A, a0*I, a0*S]

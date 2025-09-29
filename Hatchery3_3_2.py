@@ -329,7 +329,7 @@ class Hatchery3_3_2:
             qval = random.choices(list(np.arange(0,len(self.states['q']))), k = self.statevar_dim[3])
 
         # Nh
-        if initstate[2] == -1:
+        if initstate[3] == -1:
             production = self.production_target(otowi_forecast) # production target based on the initiated springflow forecast
             new_state.append(np.array([np.log(production + 1)])) 
             new_obs.append(np.array([np.log(production + 1)]))
@@ -372,7 +372,7 @@ class Hatchery3_3_2:
     def step(self, a, current_strategy = 0):
         """
         Take an action and return the next state, reward, done flag, and extra information.
-        a is a vector of 4, where the first three are stocking proportions in angostura, isleta, and san acacia, and the last one is the discard proportion.
+        a is a vector of 4, where the first is the proportion of production and the rest three are stocking proportions in angostura, isleta, and san acacia.
         current_strategy=1 takes the production action and stocking action based on the currently carried out heuristic stocking strategy.
         """
         extra_info = {}
@@ -409,43 +409,21 @@ class Hatchery3_3_2:
             Nb = 2*Nh[0]/self.stockreadyfish_per_female
             Ne_score, Neh, Ne_base = self.NeCalc0(N0,N1,p,Nb,None,None,1)
             extra_info['Ne_score'] = Ne_score # Ne_score is the Ne until you stock in the next fall.
-
+            # reproduction and summer survival
+            delfall = np.concatenate(([self.delfall[0][0]],np.random.beta(self.delfall[0][1:],self.delfall[1][1:])))
+            deldiff = np.concatenate(([self.deldiff[0][0]],np.random.beta(self.deldiff[0][1:],self.deldiff[1][1:])))
+            L, abqsf, sasf = self.q2LC(q)
+            natural_capacity = np.random.normal(self.mu, self.sd)
+            kappa = np.exp(self.beta*(L - self.Lmean) + natural_capacity)
             # local extinction if the population goes below the local threshold
             for r in range(self.n_reach):
                 if N0[r] + N1[r] < self.Nth_local[r]:
                     N0[r], N1[r] = 0, 0
             Nr_spring = N0 + N1
-            # reward & done
-            if Ne_score ==0 or Ne_base==0:
-                #genetic_reward = (np.log(Ne_score+1)[0] - np.log(Ne_base+1))
-                genetic_reward = np.log(Ne_score+1)[0]
-            else:
-                #genetic_reward = (np.log(Ne_score)[0] - np.log(Ne_base)) # + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])
-                genetic_reward = np.log(Ne_score)[0]
-            persistence_reward = np.sum(self.c/3*((Nr_spring>self.Nth_local).astype(int)))
-            extra_info['genetic_reward'] = genetic_reward
-            extra_info['persistence_reward'] = persistence_reward
-
-            if self.Rinfo['no_genetics']==1:
-                reward = persistence_reward
-            else:
-                reward = persistence_reward + genetic_reward
-
-            # hydrological stuff
-            qNforecast = self.flowmodel.nextflowNforecast() # springflow and forecast in spring
-            #q_next = q_next[0][0]
-            q_next = qNforecast[0]
-            qhat_next = qNforecast[1][1] # otowi springflow forecast
-            N0_next = N0
-            N0CF_next = N0CF
-            N1_next = N1
-            Nh_next = np.array([0])
-            Ne_next = Ne_score
-        else: # summer
-            # demographic stuff (reproductin and summer survival)
-
-            delfall = np.concatenate(([self.delfall[0][0]],np.random.beta(self.delfall[0][1:],self.delfall[1][1:])))
-            deldiff = np.concatenate(([self.deldiff[0][0]],np.random.beta(self.deldiff[0][1:],self.deldiff[1][1:])))
+            effspawner = N0 + self.beta_2*N1 # effective number of spawners
+            P1 = (self.alpha*N0)/(1 + self.alpha*effspawner/kappa) # number of recruits produced by age 1 fish that newly became adults
+            P2 = (self.alpha*self.beta_2*N1)/(1 + self.alpha*effspawner/kappa) # number of recruits produced by age 2+ fish
+            P = (self.alpha*effspawner)/(1 + self.alpha*effspawner/kappa)
             M0 = np.exp(np.random.normal(self.lM0mu, self.lM0sd))
             M1 = np.exp(np.random.normal(self.lM1mu, self.lM1sd))
             if np.sum(P)>0:
@@ -464,20 +442,43 @@ class Hatchery3_3_2:
                 N0_next = N0
                 N1_next = N1
                 Ne_next = np.array([0])
-                #juvmortality = np.exp(-124*M0-150*Mw)*((1 - delfall) + self.tau*delfall*deldiff + (1 - self.tau)*self.r0*self.phidiff)
-                #adultmortality = np.exp(-215*M1-150*Mw)*((1 - delfall) + self.tau*delfall + (1 - self.tau)*self.r1*self.phifall)
-                #extra_info['juvM'] = juvmortality
-                #extra_info['adultM'] = adultmortality
-                #extra_info['P'] = P
 
-            N0CF_next = N0_next # counterfactual N0 at the start of fall is the same as N0
-            # hatchery production for next year
+            # hydrological stuff
+            qNforecast = self.flowmodel.nextflowNforecast() # springflow and forecast in spring
+            #q_next = q_next[0][0]
+            q_next = qNforecast[0]
+            qhat_next = qNforecast[1][1] # otowi springflow forecast
+
+            # reward & done
+            if Ne_score ==0 or Ne_base==0:
+                genetic_reward = (np.log(Ne_score[0]+1) - np.log(Ne_base+1))
+                #genetic_reward = np.log(Ne_score[0]+1)
+            else:
+                #genetic_reward = (np.log(Ne_score)[0] - np.log(Ne_base)) # + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])
+                genetic_reward = (np.log(Ne_score[0]) - np.log(Ne_base)) # + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])
+                #genetic_reward = np.log(Ne_score[0])
+            persistence_reward = np.sum(self.c/3*((Nr_spring>self.Nth_local).astype(int)))
+            extra_info['genetic_reward'] = genetic_reward
+            extra_info['persistence_reward'] = persistence_reward
+
+            if self.Rinfo['no_genetics']==1:
+                reward = persistence_reward
+            else:
+                reward = persistence_reward + genetic_reward
+
+            N0CF_next = N0CF
+            Nh_next = np.array([0])
+        else: # late summer
+            # think of this as a day before the fall season and somehow you can produce all the fish needed in a day.
+            N0_next = N0
+            N0CF_next = N0CF
+            N1_next = N1
             Nh_next = np.array([a_prod * self.maxcap]) # production target based on the springflow forecast
+            Ne_next = Ne
             # flow stuff
             q_next = q[0] # no change
             qhat_next = q[0] # real flow is observed without error in the fall
-            # reward
-            reward = 0 # no reward in the spring
+            reward = 0
         done = False
         # update state & obs
         if self.discset == -1:
@@ -692,7 +693,7 @@ class Hatchery3_3_2:
         if forecast is not None:
             qhat = forecast
         else:
-            qhat = np.exp(np.array(self.obs)[self.oidx['logqhat']]) if self.discset == -1 else np.array([self.observations['qhat'][self.obs[self.oidx['qhat'][0]]]])
+            qhat = np.exp(np.array(self.obs)[self.oidx['Ologq']]) if self.discset == -1 else np.array([self.observations['qhat'][self.obs[self.oidx['qhat'][0]]]])
         qhat_kaf = qhat[0]/1233480.0 # convert cubic meter to kaf
         X = np.array([1,qhat_kaf])
         V = np.array([[1.662419546,-3.284657e-03],[-0.003284657,7.883848e-06]])

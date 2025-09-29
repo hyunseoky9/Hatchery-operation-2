@@ -10,18 +10,12 @@ import os
 from AR1_normalized import AR1_normalized
 from whitenoise_normalized import whitenoise_normalized
 
-class Hatchery3_2_4:
-    """
-    Same as hatchery 3.2, but all the fall actions are taken at once, and spring decision is not taken. It's assumed that maximum capacity is produced every year.
-    action is a vector of 4, where the first three are stocking proportions in angostura, isleta, and san acacia, and the last one is the discard proportion.
-    Another fix from Hatchery3_2 is that calculating wild Ne uses only wild origin N0 (N0CF; N0 counter-factual). This prevents double dipping in the R-L equation
-    ensuring that Ne,w in the R-L only includes wild-origin spawners. This was not possible in 3.2 because stocked fish were baked into N0 during fall timesteps (t=1,2,3)
-    """
+class Hatchery3_3_3:
     def __init__(self,initstate,parameterization_set,discretization_set,LC_prediction_method, param_uncertainty=0, Rinfo=None):
         """
-        same as 3.2.2 but the simulation doesn't terminate. The population falls to zero if the population goes below some threshold.
+        Same as 3.3.2 but there is only fall season now. production action takes within the fall season, assuming stock-ready fish are produced instantaneously
         """
-        self.envID = 'Hatchery3.2.4'
+        self.envID = 'Hatchery3.3.3'
         self.partial = True
         self.episodic = True
         self.absorbing_cut = True # has an absorbing state and the episode should be cut shortly after reaching it.
@@ -202,7 +196,6 @@ class Hatchery3_2_4:
         
         # number of broodstock used for producing maximum capacity. Assumes maximum capacity is produced every year.
         self.stockreadyfish_per_female = np.median([645.4969697,962.1485714,743.7636364,354.9875,634.92]) # first four values from bio park, 5th value from dexter. 
-        self.Nb = 2*self.maxcap/self.stockreadyfish_per_female # the value 1000 is Thomas' ballpark estimate of stock-ready fish produced per female #  2*self.maxcap/self.fc[1]
         # the value 1000 is Thomas' ballpark estimate of stock-ready fish produced per female
 
         # observation related parameters
@@ -217,15 +210,16 @@ class Hatchery3_2_4:
         self.N1minmax = [0,1e7] # N1 and N1 minmax are the total population minmax.
         self.qminmax = [self.flowmodel.flowmin[0], self.flowmodel.flowmax[0]] # springflow in angostura (abq gauge) unit: m^3
         self.Neminmax = [0, 1e7]
-        self.aminmax = [0, 300000]
+        self.aminmax = [0, self.maxcap]
         # dimension for each variables
         self.N0_dim = (self.n_reach)
         self.N1_dim = (self.n_reach)
         self.q_dim = (1)
         self.Ne_dim = (1)
+        
         self.statevar_dim = (self.N0_dim, self.N1_dim, self.q_dim, self.Ne_dim)
         self.obsvar_dim = (self.N0_dim, self.N1_dim, self.q_dim, self.Ne_dim)
-        self.action_dim = (1,1,1,1) # 4 actions: stocking proportion in angostura, isleta, and san acacia, and discard rest.
+        self.action_dim = (1,1,1,1) # 4 actions: proportion of capacity produced + stocking proportion in angostura, isleta, and san acacia.
 
         # starting 3.0, discretization for discrete variables and ranges for continuous variables will be defined in a separate function, state_discretization.
         discretization_obj = self.state_discretization(discretization_set)
@@ -311,17 +305,23 @@ class Hatchery3_2_4:
         else:
             new_state.append(np.array([initstate[1]]))
             new_obs.append(np.array([initstate[1]]))
+
+        if self.discset == -1:
+
+            qvalNforecast = self.flowmodel.nextflowNforecast()
+            qval = np.array([np.log(qvalNforecast[0] + 1)])
+            otowi_forecast = np.array([qvalNforecast[1][1]])
+        else:
+            qval = random.choices(list(np.arange(0,len(self.states['q']))), k = self.statevar_dim[3])
+
         # q & qhat
         if initstate[2] == -1:
-            if self.discset == -1:
-                qval = np.random.uniform(size=1)*(self.states['logq'][1] - self.states['logq'][0]) + self.states['logq'][0]
-            else:
-                qval = random.choices(list(np.arange(0,len(self.states['q']))), k = self.statevar_dim[3])
             new_state.append(qval)
             new_obs.append(qval)
         else:
             new_state.append(np.array([initstate[2]]))
             new_obs.append(np.array([initstate[2]]))
+
         # Ne & ONe
         if self.discset == -1:
             Neval = np.array([np.sum(np.exp(N0val)-1 + np.exp(N1val)-1)*0.6])
@@ -367,18 +367,23 @@ class Hatchery3_2_4:
             #a = self.stocking_decision() # stocking decision based on monitoring samples in september/october
             a = self.stocking_decision2(N0,N1) # stocking decision based on current strategy when assuming that you can observe the population size through IPM.
             extra_info['current_strat_action'] = a
-        a = a[0:self.n_reach] # only take the first n_reach elements of the action vector
+        a_prod = a[0] # production action
+        a_stock = a[1:]
+        a_stock = a_stock[0:self.n_reach]
+
         totpop = totN0 + totN1
 
         # demographic stuff (stocking and winter survival)
         Mw = np.exp(self.lMwmu) #np.exp(np.random.normal(self.lMwmu, self.lMwsd))
-        stockedNsurvived = a*self.maxcap*self.irphi
+        Nh = a_prod*self.maxcap # number of fish produced
+        stockedNsurvived = a_stock*Nh*self.irphi #a_stock*Nh*self.irphi
         N0CF = N0.copy()*np.exp(-150*Mw) # counterfactual N0, if no stocking had been done. Also equivalent to wild-origin spawners.
         N0 = N0 + stockedNsurvived # stocking san acacia (t=3) in the fall
         N0 = np.minimum(N0*np.exp(-150*Mw),np.ones(self.n_reach)*self.N0minmax[1]) # stocking san acacia (t=3) in the fall
         N1 = N1*np.exp(-150*Mw)
         p = stockedNsurvived*np.exp(-150*Mw) # Total number of fish stocked in a season that make it to breeding season
-        Ne_score, Neh, Ne_base = self.NeCalc0(N0,N1,p, self.Nb,None,None,1)
+        Nb = 2*self.maxcap/self.stockreadyfish_per_female
+        Ne_score, Neh, Ne_base = self.NeCalc0(N0,N1,p,Nb,None,None,1)
         extra_info['Ne_score'] = Ne_score # Ne_score is the Ne until you stock in the next fall.
         # demographic stuff (reproductin and summer survival)
 
@@ -410,7 +415,7 @@ class Hatchery3_2_4:
             # Ne calculation
             #Ne_CF, _, _ = self.NeCalc0(N0CF,N1,p,self.Nb,genT,kappa,0) # Ne if no stocking had been done
             if np.sum(N0CF+N1)>0:
-                Ne_next, _, _ = self.NeCalc0(N0CF,N1,p,self.Nb,genT,kappa,0) # N0CF is used because we need to keep track of the wild effective population size. 
+                Ne_next, _, _ = self.NeCalc0(N0CF,N1,None,None,genT,kappa,0) # N0CF is used because we need to keep track of the wild effective population size. 
             else: 
                 Ne_next = np.array([0])
             extra_info['Ne'] = Ne_next # Ne_wild is the Ne until you stock in the next fall.
@@ -425,9 +430,12 @@ class Hatchery3_2_4:
         extra_info['P'] = P
 
         # hydrological stuff
-        q_next = self.flowmodel.nextflow(q) # springflow and forecast in spring
+        qNforecast = self.flowmodel.nextflowNforecast() # springflow and forecast in spring
         #q_next = q_next[0][0]
-        q_next = q_next[0]
+        q_next = qNforecast[0]
+        forecast = np.array([qNforecast[1][1]]) # springflow forecast
+        # hatchery production for next year
+        #print(f'qnext: {np.round(q_next*8.107*(10**-7),3)}, forecast: {np.round(forecast[0]*8.107*(10**-7),3)}, production: {Nh_next[0]:.2f}')
         #extra_info['Ne_imp'] = ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])) # Ne_CF is the Ne if no stocking had been done.
         #if ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])) >=0:
         #    print(f'negative impact on Ne smaller than positive impact on Ne: {(np.log(Ne_score)[0] - np.log(Ne_base) + np.log(Ne_next)[0] - np.log(Ne_CF)[0]):.3f}')
@@ -510,10 +518,10 @@ class Hatchery3_2_4:
             }
         # action space is 4 dimensional and each dimension is continuous between 0 and 1.
         actions = {
+            "a_p": [0,1], # proportion of maximum capacity to produce (1)
             "a_a": [0,1], # proportion of fish stocked in Angostura (1)
             "a_i": [0,1], # proportion of fish stocked in Isleta (1)
-            "a_s": [0,1], # proportion of fish stocked in San Acacia (1)
-            "a_d": [0,1], # proportion of fish discarded (1)
+            "a_s": [0,1]  # proportion of fish stocked in San Acacia (1)
         }
 
         return {'states': states,'observations': observations,'actions': actions}
@@ -606,7 +614,7 @@ class Hatchery3_2_4:
     def q2LC(self, q):
         """
         input:
-            q: springflow in angostura (1)
+            q: springflow in Otowi (1)
             method: 0=HMM, 1=GAM
         output:
             LC: larval carrying capacity (3)
@@ -661,20 +669,23 @@ class Hatchery3_2_4:
         return L, abqsf, sasf
     
     
-    def production_target(self):
+    def production_target(self,forecast=None):
         """
         quantifies the amount of fish to produce in the hatchery based on the forecast
         the values here for the model is from 'Spring augmnetation planning.pdf'
         """
-        qhat = np.exp(np.array(self.obs)[self.oidx['logqhat']]) if self.discset == -1 else np.array([self.observations['qhat'][self.obs[self.oidx['qhat'][0]]]])
+        if forecast is not None:
+            qhat = forecast
+        else:
+            qhat = np.exp(np.array(self.obs)[self.oidx['logqhat']]) if self.discset == -1 else np.array([self.observations['qhat'][self.obs[self.oidx['qhat'][0]]]])
         qhat_kaf = qhat[0]/1233480.0 # convert cubic meter to kaf
         X = np.array([1,qhat_kaf])
         V = np.array([[1.662419546,-3.284657e-03],[-0.003284657,7.883848e-06]])
         se = np.sqrt(X@V@X.T)
         fit = -0.005417*(qhat_kaf) + 2.321860
         production_target = 1/(1 + np.exp(-(fit + 1.739607*se)))*299000 # the glm model predicts the percentage of the max population capacity which was 299000 in the planning document
-        aidx = self._discretize_maxstock_idx(production_target, self.actions['a'],1)
-        return aidx
+        #aidx = self._discretize_maxstock_idx(production_target, self.actions['a'],1)
+        return production_target
     
     def stocking_decision(self):
         """
@@ -710,7 +721,7 @@ class Hatchery3_2_4:
         Nr = N0 + N1 # popsize in each reach
         # figure out which reach needs augmentation and how much
         stock[0:self.n_reach] = np.maximum(self.popsize_1cpue[0:self.n_reach] - Nr,0)
-        stock_prop = stock/self.maxcap
+        stock_prop = stock/self.state[self.sidx['Nh'][0]] # divide by the current hatchery production size to get the proportion to stock in each reach.
         if np.sum(stock_prop) >= 1:
             stock_prop = stock_prop/np.sum(stock_prop)
         else:
@@ -883,7 +894,6 @@ class Hatchery3_2_4:
         paramset = np.concatenate(([self.alpha], [self.beta], self.mu, [self.sd], [self.beta_2], [self.tau], [self.r0], [self.r1], self.lM0mu, self.lM1mu, self.lMwmu, [self.irphi]))
 
         # reset genetic model parameters
-        # lkappa reset
         lkappa_dataset = self.lkappa_allposterior[self.paramsampleidx]
         self.lkappa_prob = lkappa_dataset['lkappaprob']
         self.angolkappa_midvalues = lkappa_dataset['angolkappa_midvalues']

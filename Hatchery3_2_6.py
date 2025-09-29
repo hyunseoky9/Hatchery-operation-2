@@ -208,19 +208,17 @@ class Hatchery3_2_6:
         # range for each variables
         self.N0minmax = [0,1e7] 
         self.N1minmax = [0,1e7] # N1 and N1 minmax are the total population minmax.
-        self.Nhminmax = [0,self.maxcap] # hatchery population minmax
         self.qminmax = [self.flowmodel.flowmin[0], self.flowmodel.flowmax[0]] # springflow in angostura (abq gauge) unit: m^3
         self.Neminmax = [0, 1e7]
         self.aminmax = [0, self.maxcap]
         # dimension for each variables
         self.N0_dim = (self.n_reach)
         self.N1_dim = (self.n_reach)
-        self.Nh_dim = (1)
         self.q_dim = (1)
         self.Ne_dim = (1)
         
-        self.statevar_dim = (self.N0_dim, self.N1_dim, self.Nh_dim, self.q_dim, self.Ne_dim)
-        self.obsvar_dim = (self.N0_dim, self.N1_dim, self.Nh_dim, self.q_dim, self.Ne_dim)
+        self.statevar_dim = (self.N0_dim, self.N1_dim, self.q_dim, self.Ne_dim)
+        self.obsvar_dim = (self.N0_dim, self.N1_dim, self.q_dim, self.Ne_dim)
         self.action_dim = (1,1,1) # 3 actions: stocking proportion in angostura, isleta, and san acacia.
 
         # starting 3.0, discretization for discrete variables and ranges for continuous variables will be defined in a separate function, state_discretization.
@@ -316,22 +314,13 @@ class Hatchery3_2_6:
         else:
             qval = random.choices(list(np.arange(0,len(self.states['q']))), k = self.statevar_dim[3])
 
-        # Nh
-        if initstate[2] == -1:
-            production = self.production_target(otowi_forecast) # production target based on the initiated springflow forecast
-            new_state.append(np.array([np.log(production + 1)])) 
-            new_obs.append(np.array([np.log(production + 1)]))
-        else:
-            new_state.append(np.array([initstate[2]]))
-            new_obs.append(np.array([initstate[2]]))
-
         # q & qhat
-        if initstate[3] == -1:
+        if initstate[2] == -1:
             new_state.append(qval)
             new_obs.append(qval)
         else:
-            new_state.append(np.array([initstate[3]]))
-            new_obs.append(np.array([initstate[3]]))
+            new_state.append(np.array([initstate[2]]))
+            new_obs.append(np.array([initstate[2]]))
 
         # Ne & ONe
         if self.discset == -1:
@@ -364,13 +353,11 @@ class Hatchery3_2_6:
         if self.discset == -1:
             N0 = np.exp(np.array(self.state)[self.sidx['logN0']]) - 1
             N1 = np.exp(np.array(self.state)[self.sidx['logN1']]) - 1
-            Nh = np.exp(np.array(self.state)[self.sidx["logNh"]]) - 1
             q = np.exp(np.array(self.state)[self.sidx["logq"]]) - 1
             Ne = np.exp(np.array(self.state)[self.sidx["logNe"]]) - 1
         else:
             N0 = np.array(self.states["N0"])[np.array(self.state)[self.sidx['N0']]]
             N1 = np.array(self.states["N1"])[np.array(self.state)[self.sidx['N1']]]
-            Nh = np.array(self.states["Nh"])[np.array(self.state)[self.sidx['Nh']]]
             q = np.array(self.states["q"])[np.array(self.state)[self.sidx['q']]]
             Ne = np.array(self.states['Ne'])[np.array(self.state)[self.sidx['Ne']]]
         totN0 = np.sum(N0)
@@ -385,13 +372,13 @@ class Hatchery3_2_6:
 
         # demographic stuff (stocking and winter survival)
         Mw = np.exp(self.lMwmu) #np.exp(np.random.normal(self.lMwmu, self.lMwsd))
-        stockedNsurvived = a*Nh[0]*self.irphi
+        stockedNsurvived = a*self.maxcap*self.irphi
         N0CF = N0.copy()*np.exp(-150*Mw) # counterfactual N0, if no stocking had been done. Also equivalent to wild-origin spawners.
         N0 = N0 + stockedNsurvived # stocking san acacia (t=3) in the fall
         N0 = np.minimum(N0*np.exp(-150*Mw),np.ones(self.n_reach)*self.N0minmax[1]) # stocking san acacia (t=3) in the fall
         N1 = N1*np.exp(-150*Mw)
         p = stockedNsurvived*np.exp(-150*Mw) # Total number of fish stocked in a season that make it to breeding season
-        Nb = 2*Nh[0]/self.stockreadyfish_per_female
+        Nb = 2*self.maxcap/self.stockreadyfish_per_female
         Ne_score, Neh, Ne_base = self.NeCalc0(N0,N1,p,Nb,None,None,1)
         extra_info['Ne_score'] = Ne_score # Ne_score is the Ne until you stock in the next fall.
         # demographic stuff (reproductin and summer survival)
@@ -444,7 +431,6 @@ class Hatchery3_2_6:
         q_next = qNforecast[0]
         forecast = np.array([qNforecast[1][1]]) # springflow forecast
         # hatchery production for next year
-        Nh_next = np.array([self.production_target(forecast)]) # production target based on the springflow forecast
         #print(f'qnext: {np.round(q_next*8.107*(10**-7),3)}, forecast: {np.round(forecast[0]*8.107*(10**-7),3)}, production: {Nh_next[0]:.2f}')
         #extra_info['Ne_imp'] = ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])) # Ne_CF is the Ne if no stocking had been done.
         #if ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])) >=0:
@@ -454,10 +440,10 @@ class Hatchery3_2_6:
         # reward & done
         if Ne_score ==0 or Ne_base==0:
             #genetic_reward = (np.log(Ne_score+1)[0] - np.log(Ne_base+1))
-            genetic_reward = np.log(Ne_score+1)[0]
+            genetic_reward = np.log(Ne_score[0]+1)
         else:
             #genetic_reward = (np.log(Ne_score)[0] - np.log(Ne_base)) # + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])
-            genetic_reward = np.log(Ne_score)[0]
+            genetic_reward = np.log(Ne_score[0])
         persistence_reward = np.sum(self.c/3*((Nr_spring>self.Nth_local).astype(int)))
         extra_info['genetic_reward'] = genetic_reward
         extra_info['persistence_reward'] = persistence_reward
@@ -481,10 +467,9 @@ class Hatchery3_2_6:
             logN0_next = np.log(N0_next+1)
             logN1_next = np.log(N1_next+1)
             logNe_next = np.log(Ne_next+1)
-            logNh_next = np.log(Nh_next+1)
             logq_next = np.array([np.log(q_next+1)])
-            self.state = np.concatenate([logN0_next, logN1_next, logNh_next, logq_next, logNe_next])
-            self.obs = np.concatenate([logN0_next, logN1_next, logNh_next, logq_next, logNe_next])
+            self.state = np.concatenate([logN0_next, logN1_next, logq_next, logNe_next])
+            self.obs = np.concatenate([logN0_next, logN1_next, logq_next, logNe_next])
         else:
             N0_next_idx = [self._discretize_idx(val, self.states['N0']) for val in N0_next]
             N1_next_idx = [self._discretize_idx(val, self.states['N1']) for val in N1_next]
@@ -518,14 +503,12 @@ class Hatchery3_2_6:
             states = {
                 "logN0": list(np.log(np.array(self.N0minmax)+1)), # log population size for age 0 dim:(3)
                 "logN1": list(np.log(np.array(self.N1minmax)+1)), # log population size for age 1+ (3)
-                "logNh": list(np.log(np.array(self.Nhminmax)+1)), # log spring flow in Otowi (Otowi) (1)
                 "logq": list(np.log(np.array(self.qminmax)+1)), # log spring flow in Otowi (Otowi) (1)
                 "logNe": list(np.log(np.array(self.Neminmax)+1)), # Effective population size of the wild population BEFORE stocking (1)
             }
             observations = {
                 "OlogN0": states['logN0'],
                 "OlogN1": states['logN1'],
-                "OlogNh": states['logNh'],
                 "Ologq": states['logq'],
                 "OlogNe": states['logNe'],
             }
