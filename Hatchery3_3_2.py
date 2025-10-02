@@ -410,26 +410,22 @@ class Hatchery3_3_2:
             Ne_score, Neh, Ne_base = self.NeCalc0(N0,N1,p,Nb,None,None,1)
             extra_info['Ne_score'] = Ne_score # Ne_score is the Ne until you stock in the next fall.
             # reproduction and summer survival
-            delfall = np.concatenate(([self.delfall[0][0]],np.random.beta(self.delfall[0][1:],self.delfall[1][1:])))
-            deldiff = np.concatenate(([self.deldiff[0][0]],np.random.beta(self.deldiff[0][1:],self.deldiff[1][1:])))
             L, abqsf, sasf = self.q2LC(q)
             natural_capacity = np.random.normal(self.mu, self.sd)
             kappa = np.exp(self.beta*(L - self.Lmean) + natural_capacity)
             # local extinction if the population goes below the local threshold
             for r in range(self.n_reach):
                 if N0[r] + N1[r] < self.Nth_local[r]:
-                    N0[r], N1[r] = 0, 0
+                    N0[r], N1[r], N0CF[r] = 0, 0, 0
             Nr_spring = N0 + N1
             effspawner = N0 + self.beta_2*N1 # effective number of spawners
             P1 = (self.alpha*N0)/(1 + self.alpha*effspawner/kappa) # number of recruits produced by age 1 fish that newly became adults
             P2 = (self.alpha*self.beta_2*N1)/(1 + self.alpha*effspawner/kappa) # number of recruits produced by age 2+ fish
             P = (self.alpha*effspawner)/(1 + self.alpha*effspawner/kappa)
-            M0 = np.exp(np.random.normal(self.lM0mu, self.lM0sd))
-            M1 = np.exp(np.random.normal(self.lM1mu, self.lM1sd))
             if np.sum(P)>0:
                 genT = (np.sum(P1) + np.sum(P2)*self.AVGage_of_age2plus)/np.sum(P)  # generation time
-                N0_next = np.minimum(P*np.exp(-124*M0)*((1 - delfall) + self.tau*delfall*deldiff + (1 - self.tau)*self.r0*self.phidiff),np.ones(self.n_reach)*self.N0minmax[1])
-                N1_next = np.minimum((N0+N1)*np.exp(-215*M1)*((1-delfall) + self.tau*delfall + (1 - self.tau)*self.r1*self.phifall),np.ones(self.n_reach)*self.N1minmax[1])
+                N0_next = np.minimum(N0,np.ones(self.n_reach)*self.N0minmax[1])
+                N1_next = np.minimum(N0+N1,np.ones(self.n_reach)*self.N1minmax[1])
 
                 # Ne calculation
                 #Ne_CF, _, _ = self.NeCalc0(N0CF,N1,p,self.Nb,genT,kappa,0) # Ne if no stocking had been done
@@ -468,12 +464,17 @@ class Hatchery3_3_2:
 
             N0CF_next = N0CF
             Nh_next = np.array([0])
-        else: # late summer
+        else: # June (end of Spring before entering summer drying)
+
+            delfall = np.concatenate(([self.delfall[0][0]],np.random.beta(self.delfall[0][1:],self.delfall[1][1:])))
+            deldiff = np.concatenate(([self.deldiff[0][0]],np.random.beta(self.deldiff[0][1:],self.deldiff[1][1:])))
+            M0 = np.exp(np.random.normal(self.lM0mu, self.lM0sd))
+            M1 = np.exp(np.random.normal(self.lM1mu, self.lM1sd))
+            N0_next = np.minimum(N0*np.exp(-124*M0)*((1 - delfall) + self.tau*delfall*deldiff + (1 - self.tau)*self.r0*self.phidiff),np.ones(self.n_reach)*self.N0minmax[1])
+            N1_next = np.minimum(N1*np.exp(-215*M1)*((1-delfall) + self.tau*delfall + (1 - self.tau)*self.r1*self.phifall),np.ones(self.n_reach)*self.N1minmax[1])
 
             # think of this as a day before the fall season and somehow you can produce all the fish needed in a day.
-            N0_next = N0
-            N0CF_next = N0CF
-            N1_next = N1
+            N0CF_next = N0_next
             Nh_next = np.array([np.round(a_prod * self.maxcap)]) # production target based on the springflow forecast
             Ne_next = Ne
             # flow stuff

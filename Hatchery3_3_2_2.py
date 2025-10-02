@@ -411,7 +411,7 @@ class Hatchery3_3_2_2:
             # local extinction if the population goes below the local threshold
             for r in range(self.n_reach):
                 if N0[r] + N1[r] < self.Nth_local[r]:
-                    N0[r], N1[r] = 0, 0
+                    N0[r], N1[r], N0CF[r] = 0, 0, 0
             Nr_spring = N0 + N1
             effspawner = N0 + self.beta_2*N1 # effective number of spawners
             P1 = (self.alpha*N0)/(1 + self.alpha*effspawner/kappa) # number of recruits produced by age 1 fish that newly became adults
