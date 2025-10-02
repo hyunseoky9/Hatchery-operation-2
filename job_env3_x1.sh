@@ -13,7 +13,6 @@ exec >"$LOGFILE" 2>&1              # send all output (stdout+stderr) to the log
 module purge
 
 ## Execute the python script and pass the argument/input '90'
-ARG=$1   # grab the first argument passed to sbatch
 source ~/miniconda3/bin/activate py310
 export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1}
 
