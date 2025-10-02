@@ -1,6 +1,4 @@
 import shutil
-
-from pytest import param
 from ddpg_critic import Critic
 from ddpg_critic2 import Critic2
 from OUNoise import OUNoise
