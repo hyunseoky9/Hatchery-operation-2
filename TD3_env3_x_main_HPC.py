@@ -11,6 +11,7 @@ if __name__ == "__main__":
     best_scores = []
     seeds = []
     tuneset = 1
+    foo = 0
     for paramdf in paramdflist:
         for iteration in range(iteration_num):
             print('-------------------------------------------------------\n--------------------------------------------------------')
