@@ -6,7 +6,7 @@
 #SBATCH --cpus-per-task=8      ## The number of threads the code will use
 #SBATCH --mem-per-cpu=2G     ## Real memory(MB) per CPU required by the job.
 ARG=${1:-1}
-LOGFILE="TD3_${ARG}.out"
+LOGFILE="TD3_${ARG}_$(date +%Y%m%d_%H%M%S).out"
 exec >"$LOGFILE" 2>&1              # send all output (stdout+stderr) to the log
 
 ## not using the default python
