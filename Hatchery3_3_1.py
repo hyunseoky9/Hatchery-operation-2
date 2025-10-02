@@ -418,7 +418,7 @@ class Hatchery3_3_1:
             # local extinction if the population goes below the local threshold
             for r in range(self.n_reach):
                 if N0[r] + N1[r] < self.Nth_local[r]:
-                    N0[r], N1[r] = 0, 0
+                    N0[r], N1[r], N0CF[r] = 0, 0, 0
             Nr_spring = N0 + N1
             # reward & done
             if Ne_score ==0 or Ne_base==0:
@@ -490,7 +490,7 @@ class Hatchery3_3_1:
 
             N0CF_next = N0_next # counterfactual N0 at the start of fall is the same as N0
             # hatchery production for next year
-            Nh_next = np.array([a_prod * self.maxcap]) # production target based on the springflow forecast
+            Nh_next = np.array([np.round(a_prod * self.maxcap)]) # production target based on the springflow forecast
             # flow stuff
             q_next = q[0] # no change
             qhat_next = q[0] # real flow is observed without error in the fall

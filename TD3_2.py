@@ -9,7 +9,7 @@ import torch.nn.functional as F
 import torch
 from torch import nn
 from torchvision.transforms import ToTensor
-from torch.optim.lr_scheduler import ExponentialLR, LambdaLR
+from torch.optim.lr_scheduler import ExponentialLR, LambdaLR, MultiStepLR, CosineAnnealingLR
 import pickle
 import os
 import copy
@@ -106,6 +106,10 @@ class TD3_2():
             self.critic_min_lr = float('-inf') # minimum learning rate for critic network
         else:
             self.critic_min_lr = float(paramdf['critic_minlr'])
+
+        self.actor_lrdecaytype = paramdf['actor_lrdecaytype'] # learning rate decay type for actor network
+        self.critic_lrdecaytype = paramdf['critic_lrdecaytype'] # learning rate decay type for critic network
+        self.scheduler_info = eval(paramdf['scheduler_info'])
         ## weight decay
         self.critic_weight_decay = float(paramdf['critic_weight_decay']) # weight decay for critic network
 
@@ -197,9 +201,19 @@ class TD3_2():
         self.actor_opt = torch.optim.Adam(self.actor_local.parameters(), lr=self.actor_lr, eps=1e-8)
 
         ## Schedulers
-        self.critic1_scheduler = ExponentialLR(self.critic1_opt, gamma=self.critic_lrdecayrate)  # Exponential decay
-        self.critic2_scheduler = ExponentialLR(self.critic2_opt, gamma=self.critic_lrdecayrate)  # Exponential decay
-        self.actor_scheduler = ExponentialLR(self.actor_opt, gamma=self.actor_lrdecayrate)  # Exponential decay
+        if self.critic_lrdecaytype == 'exp':
+            self.critic1_scheduler = ExponentialLR(self.critic1_opt, gamma=self.critic_lrdecayrate)  # Exponential decay
+            self.critic2_scheduler = ExponentialLR(self.critic2_opt, gamma=self.critic_lrdecayrate)  # Exponential decay
+        elif self.critic_lrdecaytype == 'multistep':
+            self.critic1_scheduler = MultiStepLR(self.critic1_opt, milestones=self.scheduler_info['lr_drop_ep'], gamma=self.scheduler_info['lr_drop_gamma'])
+            self.critic2_scheduler = MultiStepLR(self.critic2_opt, milestones=self.scheduler_info['lr_drop_ep'], gamma=self.scheduler_info['lr_drop_gamma'])
+
+        if self.actor_lrdecaytype == 'exp':
+            self.actor_scheduler = ExponentialLR(self.actor_opt, gamma=self.actor_lrdecayrate)  # Exponential decay
+        elif self.actor_lrdecaytype == 'multistep':
+            self.actor_scheduler = MultiStepLR(self.actor_opt, milestones=self.scheduler_info['lr_drop_ep'], gamma=self.scheduler_info['lr_drop_gamma'])
+        self.did_first_update = False # did first optimizer step update
+
 
         ## initialize step counter for delayed updates
         self.learn_step = 0
@@ -271,14 +285,16 @@ class TD3_2():
         self.critic1_opt.zero_grad()
         critic1_loss.backward()
         self.critic1_opt.step()
-        self.critic1_scheduler.step() # Decay the learning rate
+        if isinstance(self.critic1_scheduler, ExponentialLR):
+            self.critic1_scheduler.step() # Decay the learning rate
         if self.critic_min_lr != float('-inf'): # if there's a minimum learning rate, don't go below it.
             if self.critic1_opt.param_groups[0]['lr'] < self.critic_min_lr:
                 self.critic1_opt.param_groups[0]['lr'] = self.critic_min_lr
         self.critic2_opt.zero_grad()
         critic2_loss.backward()
         self.critic2_opt.step()
-        self.critic2_scheduler.step() # Decay the learning rate
+        if isinstance(self.critic2_scheduler, ExponentialLR):
+            self.critic2_scheduler.step() # Decay the learning rate
         if self.critic_min_lr != float('-inf'): # if there's a minimum learning
             if self.critic2_opt.param_groups[0]['lr'] < self.critic_min_lr:
                 self.critic2_opt.param_groups[0]['lr'] = self.critic_min_lr
@@ -293,7 +309,10 @@ class TD3_2():
             self.actor_opt.zero_grad()
             actor_loss.backward()
             self.actor_opt.step()
-            self.actor_scheduler.step() # Decay the learning rate
+            if not self.did_first_update:
+                self.did_first_update = True
+            if isinstance(self.actor_scheduler, ExponentialLR):
+                self.actor_scheduler.step() # Decay the learning rate
             if self.actor_min_lr != float('-inf'):
                 if self.actor_opt.param_groups[0]['lr'] < self.actor_min_lr:
                     self.actor_opt.param_groups[0]['lr'] = self.actor_min_lr
@@ -339,6 +358,12 @@ class TD3_2():
                 if done:
                     break
             scores.append(score)
+            if self.did_first_update: # only step the scheduler if the optimizer has been stepped at least once
+                if isinstance(self.actor_scheduler, (MultiStepLR, CosineAnnealingLR)):
+                    self.actor_scheduler.step()
+                if isinstance(self.critic1_scheduler, (MultiStepLR, CosineAnnealingLR)):
+                    self.critic1_scheduler.step()
+                    self.critic2_scheduler.step()
             if i_episode % 500 == 0:
                 print(f"Episode {i_episode}")
 

@@ -391,7 +391,7 @@ class Hatchery3_2_5:
 
         # demographic stuff (stocking and winter survival)
         Mw = np.exp(self.lMwmu) #np.exp(np.random.normal(self.lMwmu, self.lMwsd))
-        stockedNsurvived = a*Nh[0]*self.irphi
+        stockedNsurvived = np.round(a*Nh[0])*self.irphi
         N0CF = N0.copy()*np.exp(-150*Mw) # counterfactual N0, if no stocking had been done. Also equivalent to wild-origin spawners.
         N0 = N0 + stockedNsurvived # stocking san acacia (t=3) in the fall
         N0 = np.minimum(N0*np.exp(-150*Mw),np.ones(self.n_reach)*self.N0minmax[1]) # stocking san acacia (t=3) in the fall

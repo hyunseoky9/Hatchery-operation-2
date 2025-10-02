@@ -469,11 +469,12 @@ class Hatchery3_3_2:
             N0CF_next = N0CF
             Nh_next = np.array([0])
         else: # late summer
+
             # think of this as a day before the fall season and somehow you can produce all the fish needed in a day.
             N0_next = N0
             N0CF_next = N0CF
             N1_next = N1
-            Nh_next = np.array([a_prod * self.maxcap]) # production target based on the springflow forecast
+            Nh_next = np.array([np.round(a_prod * self.maxcap)]) # production target based on the springflow forecast
             Ne_next = Ne
             # flow stuff
             q_next = q[0] # no change
