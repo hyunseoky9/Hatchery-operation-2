@@ -424,7 +424,7 @@ class Hatchery3_3_2:
             P = (self.alpha*effspawner)/(1 + self.alpha*effspawner/kappa)
             if np.sum(P)>0:
                 genT = (np.sum(P1) + np.sum(P2)*self.AVGage_of_age2plus)/np.sum(P)  # generation time
-                N0_next = np.minimum(N0,np.ones(self.n_reach)*self.N0minmax[1])
+                N0_next = np.minimum(P,np.ones(self.n_reach)*self.N0minmax[1])
                 N1_next = np.minimum(N0+N1,np.ones(self.n_reach)*self.N1minmax[1])
 
                 # Ne calculation
@@ -482,6 +482,8 @@ class Hatchery3_3_2:
             qhat_next = q[0] # real flow is observed without error in the fall
             reward = 0
         done = False
+        if np.sum(N0_next) == 0:
+            foo = 0
         # update state & obs
         if self.discset == -1:
             logN0_next = np.log(N0_next+1)
