@@ -13,7 +13,7 @@ from whitenoise_normalized_otowi import whitenoise_normalized_otowi
 class Hatchery3_3_1:
     """
     same as 3.2.6, but Bringing back spring production action
-    Action must now be an array of 5 elements: proportiof capacity produced + stocking proportion in angostura, isleta, and san acacia, and discarding
+    Action must now be an array of 4 elements: proportiof capacity produced + stocking proportion in angostura, isleta, and san acacia
     """
     def __init__(self,initstate,parameterization_set,discretization_set,LC_prediction_method, param_uncertainty=0, Rinfo=None):
         """
@@ -315,6 +315,9 @@ class Hatchery3_3_1:
         if initstate[1] == -1:
             new_state.append(N0val) # counterfactual N0 at the start of fall is the same as N0
             new_obs.append(N0val)
+        else:
+            new_state.append(np.array([initstate[1]]))
+            new_obs.append(np.array([initstate[1]]))
 
         # N1 & ON1
         if initstate[2] == -1:
@@ -422,11 +425,11 @@ class Hatchery3_3_1:
             Nr_spring = N0 + N1
             # reward & done
             if Ne_score ==0 or Ne_base==0:
-                #genetic_reward = (np.log(Ne_score+1)[0] - np.log(Ne_base+1))
-                genetic_reward = np.log(Ne_score[0]+1)
+                genetic_reward = (np.log(Ne_score[0]+1) - np.log(Ne_base+1))
+                #genetic_reward = np.log(Ne_score[0]+1)
             else:
-                #genetic_reward = (np.log(Ne_score)[0] - np.log(Ne_base)) # + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])
-                genetic_reward = np.log(Ne_score[0])
+                genetic_reward = (np.log(Ne_score[0]) - np.log(Ne_base)) # + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])
+                #genetic_reward = np.log(Ne_score[0])
             persistence_reward = np.sum(self.c/3*((Nr_spring>self.Nth_local).astype(int)))
             extra_info['genetic_reward'] = genetic_reward
             extra_info['persistence_reward'] = persistence_reward
@@ -445,7 +448,7 @@ class Hatchery3_3_1:
             N0CF_next = N0CF
             N1_next = N1
             Nh_next = np.array([0])
-            Ne_next = Ne_score
+            Ne_next = np.array([Ne_base]) #Ne_score
         else: # spring
             # demographic stuff (reproductin and summer survival)
 
@@ -754,7 +757,7 @@ class Hatchery3_3_1:
         Nr = N0 + N1 # popsize in each reach
         # figure out which reach needs augmentation and how much
         stock[0:self.n_reach] = np.maximum(self.popsize_1cpue[0:self.n_reach] - Nr,0)
-        stock_prop = stock/self.state[self.sidx['Nh'][0]] # divide by the current hatchery production size to get the proportion to stock in each reach.
+        stock_prop = stock/self.state[self.sidx['logNh'][0]] # divide by the current hatchery production size to get the proportion to stock in each reach.
         if np.sum(stock_prop) >= 1:
             stock_prop = stock_prop/np.sum(stock_prop)
         else:
