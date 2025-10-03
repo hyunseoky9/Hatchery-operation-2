@@ -382,7 +382,7 @@ class Hatchery3_3_3:
         N0 = np.minimum(N0*np.exp(-150*Mw),np.ones(self.n_reach)*self.N0minmax[1]) # stocking san acacia (t=3) in the fall
         N1 = N1*np.exp(-150*Mw)
         p = stockedNsurvived*np.exp(-150*Mw) # Total number of fish stocked in a season that make it to breeding season
-        Nb = 2*self.maxcap/self.stockreadyfish_per_female
+        Nb = 2*Nh/self.stockreadyfish_per_female #2*self.maxcap/self.stockreadyfish_per_female
         Ne_score, Neh, Ne_base = self.NeCalc0(N0,N1,p,Nb,None,None,1)
         extra_info['Ne_score'] = Ne_score # Ne_score is the Ne until you stock in the next fall.
         # demographic stuff (reproductin and summer survival)
