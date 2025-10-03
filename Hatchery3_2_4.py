@@ -86,7 +86,7 @@ class Hatchery3_2_4:
         self.larvaecollection_max = paramdf['larvaecollection_max'][self.parset] # maximum number of larvae that can be collected 
         self.sc = np.array([paramdf['s1'][self.parset],paramdf['s2'][self.parset],paramdf['s3'][self.parset]]) # cohort survival rate by age group
         self.rlen = np.array([paramdf['angolen'][self.parset], paramdf['isllen'][self.parset], paramdf['salen'][self.parset]]) # reach length in km
-        self.dth = 50 # paramdf['dth'][self.parset] # 10 # density threshold
+        self.dth = paramdf['dth'][self.parset] # 10 # density threshold
         self.Nth_local = self.rlen* self.dth
         self.Nth = np.sum(self.Nth_local)
         if Rinfo is None:
@@ -880,7 +880,7 @@ class Hatchery3_2_4:
                                self.param_uncertainty_df['lMwmu_i'].iloc[self.paramsampleidx], 
                                self.param_uncertainty_df['lMwmu_s'].iloc[self.paramsampleidx]])
         self.irphi = self.param_uncertainty_df['irphi'].iloc[self.paramsampleidx]
-        self.dth = 50 # self.param_uncertainty_df['dth'].iloc[self.paramsampleidx]
+        self.dth = self.param_uncertainty_df['dth'].iloc[self.paramsampleidx]
         paramset = np.concatenate(([self.alpha], [self.beta], self.mu, [self.sd], [self.beta_2], [self.tau], [self.r0], [self.r1], self.lM0mu, self.lM1mu, self.lMwmu, [self.irphi], [self.dth]))
 
         # reset genetic model parameters
