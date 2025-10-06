@@ -403,6 +403,7 @@ class Hatchery3_3_1:
         a_stock = a[1:]
         a_stock = a_stock[0:self.n_reach]
         totpop = totN0 + totN1
+        
         # switch season 
         t_next = np.array([(t + 1) % 2]) # 0 is spring and 1 is fall
         if t == 1: # fall
