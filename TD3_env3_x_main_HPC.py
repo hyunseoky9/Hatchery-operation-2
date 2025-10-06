@@ -16,7 +16,7 @@ if __name__ == "__main__":
         for iteration in range(iteration_num):
             print('-------------------------------------------------------\n--------------------------------------------------------')
             seed = paramdf['seed'] # make sure iteration_num matches with the number of seeds if seeds are specified
-            paramdf['parallel_testing'] = 0
+            paramdf['parallel_testing'] = 0 # always serial for HPC
             if seed == 'random':
                 seednum = random.randint(0,1000000)
             else:
