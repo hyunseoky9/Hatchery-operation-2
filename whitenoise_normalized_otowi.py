@@ -77,7 +77,7 @@ class whitenoise_normalized_otowi:
             self.bias_95interval[0],
             self.bias_95interval[1]
         )
-        bias = np.array([0])
+        #bias = np.array([0]) # activate this line to turn off forecast bias
         # apply forecast bias
         otowi_forecast = otowi_flow + bias # bias 0 for now
         # make sure forecast is within range
