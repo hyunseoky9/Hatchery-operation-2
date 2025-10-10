@@ -376,7 +376,7 @@ class TD3():
                 critic1_current_lr = self.critic1_opt.param_groups[0]['lr']
                 critic2_current_lr = self.critic2_opt.param_groups[0]['lr']
                 actor_current_lr = self.actor_opt.param_groups[0]['lr']
-                print(f"Episode {i_episode}, Learning Rate: A{actor_current_lr}/C1{critic1_current_lr}/C2{critic2_current_lr} Avg Performance: {inttestscore:.2f}")
+                print(f"Episode {i_episode}, Learning Rate: A{np.round(actor_current_lr, 6)}/C1{np.round(critic1_current_lr, 6)}/C2{np.round(critic2_current_lr, 6)} Avg Performance: {inttestscore:.2f}")
                 print('-----------------------------------')
             # decay the exploration noise sigma
             self.noise.sigma = max(self.exploration_sigma_end,self.exploration_sigma_start - (self.exploration_sigma_start - self.exploration_sigma_end) *(i_episode+1) / self.exploration_decay_steps) 
