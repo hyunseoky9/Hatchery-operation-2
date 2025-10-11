@@ -5,7 +5,7 @@ import sys
 if __name__ == "__main__":
     paramid = int(sys.argv[1]) # test id = 4
     #paramid = 10 # test id = 4
-    iteration_num = 20
+    iteration_num = 30
     hyperparameterization_set_filename = './hyperparamsets/Hatchery3.x TD3bests.csv'
     paramdflist = call_paramset(hyperparameterization_set_filename,paramid)
     best_scores = []
