@@ -435,6 +435,9 @@ class Hatchery3_3_1:
                 extra_info['genetic_reward'] = genetic_reward
                 extra_info['persistence_reward'] = persistence_reward
 
+                if genetic_reward > 0:
+                    foo =0 
+                    foo = 1
                 if self.Rinfo['no_genetics']==1:
                     reward = persistence_reward
                 else:
