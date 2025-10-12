@@ -338,7 +338,7 @@ class Hatchery3_3_1:
 
         # Nh
         if initstate[3] == -1:
-            production = self.production_target(otowi_forecast) # production target based on the initiated springflow forecast
+            production = 0 # start with no fish. #self.production_target(otowi_forecast) # production target based on the initiated springflow forecast
             new_state.append(np.array([np.log(production + 1)])) 
             new_obs.append(np.array([np.log(production + 1)]))
         else:
@@ -409,7 +409,7 @@ class Hatchery3_3_1:
             if t == 1: # fall
                 # demographic stuff (stocking and winter survival)
                 Mw = np.exp(self.lMwmu) #np.exp(np.random.normal(self.lMwmu, self.lMwsd))
-                stockedNsurvived = a_stock*Nh*self.irphi
+                stockedNsurvived = np.round(a_stock*Nh)*self.irphi
                 N0CF = N0.copy()*np.exp(-150*Mw) # counterfactual N0, if no stocking had been done. Also equivalent to wild-origin spawners.
                 N0 = N0 + stockedNsurvived # stocking san acacia (t=3) in the fall
                 N0 = np.minimum(N0*np.exp(-150*Mw),np.ones(self.n_reach)*self.N0minmax[1]) # stocking san acacia (t=3) in the fall
@@ -435,9 +435,6 @@ class Hatchery3_3_1:
                 extra_info['genetic_reward'] = genetic_reward
                 extra_info['persistence_reward'] = persistence_reward
 
-                if genetic_reward > 0:
-                    foo =0 
-                    foo = 1
                 if self.Rinfo['no_genetics']==1:
                     reward = persistence_reward
                 else:
