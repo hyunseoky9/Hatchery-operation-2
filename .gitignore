@@ -14,7 +14,8 @@ TD3 results/
 DRQN results/
 a3c results/
 rayrllib results/
-figures/ 
+figures/
+manuscript results/ 
 pomdp/
 .vscode/
 # Ignore Python cache files and directories
