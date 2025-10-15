@@ -396,8 +396,12 @@ class Hatchery3_3_1:
         totN1 = np.sum(N1)
         Nr = N0 + N1 # population size in each reach
         if current_strategy == 1: 
-            #a = self.stocking_decision() # stocking decision based on monitoring samples in september/october
-            a = self.stocking_decision2(N0,N1) # stocking decision based on current strategy when assuming that you can observe the population size through IPM.
+            if t == 0: # spring
+                prod_target = self.production_target(self.obs[self.oidx['Ologq']])
+                prod_target = np.array([min(prod_target, self.maxcap)/self.maxcap])
+                a = np.concatenate((prod_target,[0,0,0])) # production target based on the observed springflow forecast
+            else:
+                a = np.concatenate(([0],self.stocking_decision3(N0,N1))) # stocking decision based on current strategy when assuming that you can observe the population size through IPM.
             extra_info['current_strat_action'] = a
         a_prod = a[0] # production action
         a_stock = a[1:]
@@ -755,21 +759,30 @@ class Hatchery3_3_1:
         stock_prop = stock/np.sum(stock)
         return stock_prop
 
-    def stocking_decision2(self, N0, N1):
+    def stocking_decision3(self, N0, N1):
         """
         same as stocking_decision but it assumes that the manager observes the actual population size or at least gets the estimate of the population size from Charles' IPM model. 
-        The manager tries to stock enough to meet the 1.0 CPUE target in each reach. So get the corresponding average population size for 1 cpue for each reach and then stock if the 
-        current population size is below that.
+        The manager tries to stock enough to meet the 1.0 CPUE target in each reach. 
+        If there are any reaches below expected 1.0 CPUE equivalent popsize
+            only stock in those reaches to put them back to 1.0 CPUE equivalent popsize. Any leftover are distributed are stocked among reaches with inverse proportional weights.
+            inverse proportional weights: if each reach's population is 100,200,300, then the weights are inverse population / sum of inverse population = (1/100, 1/200, 1/300)/sum(1/100, 1/200, 1/300)
         """
-        stock = np.zeros(self.n_reach + 1)
+        stock = np.zeros(self.n_reach)
         Nr = N0 + N1 # popsize in each reach
-        # figure out which reach needs augmentation and how much
+        # figure out which reach needs augmentation because they're below 1.0CPUE and how much
         stock[0:self.n_reach] = np.maximum(self.popsize_1cpue[0:self.n_reach] - Nr,0)
-        stock_prop = stock/self.state[self.sidx['logNh'][0]] # divide by the current hatchery production size to get the proportion to stock in each reach.
-        if np.sum(stock_prop) >= 1:
-            stock_prop = stock_prop/np.sum(stock_prop)
-        else:
-            stock_prop[-1] = 1 - np.sum(stock_prop[0:self.n_reach])
+        Nh = np.round(np.exp(np.array(self.state)[self.sidx['logNh'][0]]) - 1)
+        if np.sum(stock) <= Nh:
+            if Nh == 0:
+                return (1/(Nr + 1))/np.sum(1/(Nr + 1)) # add 1 to avoid division by zero
+            else:
+                leftover = Nh - np.sum(stock)
+                inverseweight = (1/(Nr + 1))/np.sum(1/(Nr + 1)) # add 1 to avoid division by zero
+                leftoverstock = inverseweight*leftover
+                stock[0:self.n_reach] = stock[0:self.n_reach] + leftoverstock
+        if np.sum(stock) == 0:
+            foo = 0
+        stock_prop = stock/np.sum(stock)
         return stock_prop
 
     def monitoring_sample(self):
