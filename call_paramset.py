@@ -52,6 +52,7 @@ from Hatchery3_3_1 import Hatchery3_3_1
 from Hatchery3_3_2 import Hatchery3_3_2
 from Hatchery3_3_2_2 import Hatchery3_3_2_2
 from Hatchery3_3_3 import Hatchery3_3_3
+from Hatchery3_4_1 import Hatchery3_4_1
 
 from tiger import Tiger
 def call_env(param):
@@ -102,6 +103,8 @@ def call_env(param):
         return Hatchery3_3_2_2(config['init'], config['paramset'], config['discretization'],config['LC'], config['uncertainty'], config['Rinfo'])
     elif param['envid'] == 'Hatchery3.3.3':
         return Hatchery3_3_3(config['init'], config['paramset'], config['discretization'],config['LC'], config['uncertainty'], config['Rinfo'])
+    elif param['envid'] == 'Hatchery3.4.1':
+        return Hatchery3_4_1(config['init'], config['paramset'], config['discretization'],config['LC'], config['uncertainty'], config['Rinfo'])
     elif param['envid'] == 'Tiger':
         return Tiger()
     else:

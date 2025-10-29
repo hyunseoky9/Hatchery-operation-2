@@ -72,7 +72,7 @@ def worker(policy, workerepisodenum, rms, worker_id, envinit_params, t_maxstep, 
 
     totrewards_perworker = 0 # set reward counter.
 
-    if env.envID in ['Hatchery3.2.2', 'Hatchery3.2.3','Hatchery3.2.4','Hatchery3.2.5','Hatchery3.2.6','Hatchery3.3.1','Hatchery3.3.2','Hatchery3.3.2.2','Hatchery3.3.3']:
+    if env.envID in ['Hatchery3.2.2', 'Hatchery3.2.3','Hatchery3.2.4','Hatchery3.2.5','Hatchery3.2.6','Hatchery3.3.1','Hatchery3.3.2','Hatchery3.3.2.2','Hatchery3.3.3','Hatchery3.4.1']:
         actiondist = torch.zeros(action_size, dtype=torch.float32)
         actiondistcount = 0
 
@@ -90,7 +90,7 @@ def worker(policy, workerepisodenum, rms, worker_id, envinit_params, t_maxstep, 
                 s = torch.as_tensor(stack.copy(), dtype=torch.float32, device=device).unsqueeze(0)
                 action = policy(s)
                 action = action.cpu().numpy().squeeze(0)
-                if env.envID in ['Hatchery3.2.2', 'Hatchery3.2.3','Hatchery3.2.4','Hatchery3.2.5','Hatchery3.2.6','Hatchery3.3.1','Hatchery3.3.2','Hatchery3.3.2.2','Hatchery3.3.3']:
+                if env.envID in ['Hatchery3.2.2', 'Hatchery3.2.3','Hatchery3.2.4','Hatchery3.2.5','Hatchery3.2.6','Hatchery3.3.1','Hatchery3.3.2','Hatchery3.3.2.2','Hatchery3.3.3','Hatchery3.4.1']:
                     actiondist += action
                     actiondistcount += 1
             _, reward, done, _ = env.step(action)
