@@ -10,13 +10,13 @@ import os
 from AR1_normalized import AR1_normalized
 from whitenoise_normalized_otowi import whitenoise_normalized_otowi
 
-class Hatchery3_3_1_2:
+class Hatchery3_4_1:
     """
     same as 3.3.1 but the fish produced can now be carried over to next year if not stocked.
     The 2nd year fish must be stocked, cannot be carried over to next year.
     """
     def __init__(self,initstate,parameterization_set,discretization_set,LC_prediction_method, param_uncertainty=0, Rinfo=None):
-        self.envID = 'Hatchery3.3.1.2'
+        self.envID = 'Hatchery3.4.1'
         self.partial = True
         self.episodic = True
         self.absorbing_cut = True # has an absorbing state and the episode should be cut shortly after reaching it.
@@ -197,7 +197,7 @@ class Hatchery3_3_1_2:
         
         # number of broodstock used for producing maximum capacity. Assumes maximum capacity is produced every year.
         self.stockreadyfish_per_female = np.median([645.4969697,962.1485714,743.7636364,354.9875,634.92]) # first four values from bio park, 5th value from dexter. 
-        self.Nb = 2*self.maxcap/self.stockreadyfish_per_female # the value 1000 is Thomas' ballpark estimate of stock-ready fish produced per female #  2*self.maxcap/self.fc[1]
+        self.Nb = 2*self.maxcap/self.stockreadyfish_per_female # number of female fish used for production the value 1000 is Thomas' ballpark estimate of stock-ready fish produced per female #  2*self.maxcap/self.fc[1]
         # the value 1000 is Thomas' ballpark estimate of stock-ready fish produced per female
 
         # observation related parameters
@@ -226,7 +226,7 @@ class Hatchery3_3_1_2:
         self.t_dim = (1)
         self.statevar_dim = (self.N0_dim, self.N0CF_dim, self.N1_dim, self.Nh_dim, self.q_dim, self.Ne_dim, self.t_dim)
         self.obsvar_dim = (self.N0_dim, self.N0CF_dim, self.N1_dim, self.Nh_dim, self.q_dim, self.Ne_dim, self.t_dim)
-        self.action_dim = (1,1,1,1) # 4 actions: proportion of capacity produced + stocking proportion in angostura, isleta, and san acacia.
+        self.action_dim = (1,1,1,1,1) # 5 actions: proportion of capacity produced + stocking proportion in angostura, isleta, and san acacia + proportion of age 0 hatchery fish carried over to next year.
 
         # starting 3.0, discretization for discrete variables and ranges for continuous variables will be defined in a separate function, state_discretization.
         discretization_obj = self.state_discretization(discretization_set)
@@ -334,9 +334,9 @@ class Hatchery3_3_1_2:
 
         # Nh
         if initstate[3] == -1:
-            production = 0 # start with no fish. #self.production_target(otowi_forecast) # production target based on the initiated springflow forecast
-            new_state.append(np.array([np.log(production + 1)])) 
-            new_obs.append(np.array([np.log(production + 1)]))
+            production = np.array([0,0]) # start with no fish. #self.production_target(otowi_forecast) # production target based on the initiated springflow forecast
+            new_state.append(np.array(np.log(production + 1))) 
+            new_obs.append(np.array(np.log(production + 1)))
         else:
             new_state.append(np.array([initstate[3]]))
             new_obs.append(np.array([initstate[3]]))
@@ -395,13 +395,13 @@ class Hatchery3_3_1_2:
             if t == 0: # spring
                 prod_target = self.production_target(np.exp(self.obs[self.oidx['Ologq']])-1)
                 prod_target = np.array([min(prod_target, self.maxcap)/self.maxcap])
-                a = np.concatenate((prod_target,[0,0,0])) # production target based on the observed springflow forecast
+                a = np.concatenate((prod_target,[0,0,0,0])) # production target based on the observed springflow forecast
             else:
-                a = np.concatenate(([0],self.stocking_decision3(N0,N1))) # stocking decision based on current strategy when assuming that you can observe the population size through IPM.
+                a = np.concatenate(([0],self.stocking_decision3(N0,N1),[0])) # stocking decision based on current strategy when assuming that you can observe the population size through IPM.
             extra_info['current_strat_action'] = a
         a_prod = a[0] # production action
-        a_stock = a[1:]
-        a_stock = a_stock[0:self.n_reach]
+        a_stock = a[1:(1+self.n_reach)]
+        a_carryover = a[1+self.n_reach] # proportion of age0 hatchery fish carried over to next years
         totpop = totN0 + totN1
         # switch season 
         t_next = np.array([(t + 1) % 2]) # 0 is spring and 1 is fall
@@ -409,7 +409,7 @@ class Hatchery3_3_1_2:
             if t == 1: # fall
                 # demographic stuff (stocking and winter survival)
                 Mw = np.exp(self.lMwmu) #np.exp(np.random.normal(self.lMwmu, self.lMwsd))
-                stockedNsurvived = np.round(a_stock*Nh)*self.irphi
+                stockedNsurvived = np.round(a_stock*(1 - a_carryover)*Nh[0] + a_stock*Nh[1])*self.irphi
                 #print(f'x in fall {np.sum(stockedNsurvived)/np.sum((N0+stockedNsurvived))}')
                 N0CF = N0.copy()*np.exp(-150*Mw) # counterfactual N0, if no stocking had been done. Also equivalent to wild-origin spawners.
                 extra_info['Mw'] = Mw
@@ -417,7 +417,7 @@ class Hatchery3_3_1_2:
                 N0 = np.minimum(N0*np.exp(-150*Mw),np.ones(self.n_reach)*self.N0minmax[1]) # stocking san acacia (t=3) in the fall
                 N1 = N1*np.exp(-150*Mw)
                 p = stockedNsurvived*np.exp(-150*Mw) # Total number of fish stocked in a season that make it to breeding season
-                Nb = 2*Nh[0]/self.stockreadyfish_per_female
+                Nb = 2*np.sum(Nh)/self.stockreadyfish_per_female
                 Ne_score, Neh, Ne_base = self.NeCalc0(N0,N1,p,Nb,None,None,1)
                 extra_info['Ne_score'] = Ne_score # Ne_score is the Ne until you stock in the next fall.
 
@@ -450,7 +450,7 @@ class Hatchery3_3_1_2:
                 N0_next = N0
                 N0CF_next = N0CF
                 N1_next = N1
-                Nh_next = np.array([0])
+                Nh_next = np.array([0.0,np.round(a_carryover*Nh[0])]) # some age 0 carried over to age 1
                 Ne_next = np.array([Ne_base]) #Ne_score
             else: # spring
                 # demographic stuff (reproductin and summer survival)
@@ -496,7 +496,7 @@ class Hatchery3_3_1_2:
 
                 N0CF_next = N0_next # counterfactual N0 at the start of fall is the same as N0
                 # hatchery production for next year
-                Nh_next = np.array([np.round(a_prod * self.maxcap)]) # production target based on the springflow forecast
+                Nh_next = np.array([np.round(a_prod * self.maxcap), Nh[1]]) # production target based on the springflow forecast
                 # flow stuff
                 q_next = q[0] # no change
                 qhat_next = q[0] # real flow is observed without error in the fall
@@ -567,7 +567,8 @@ class Hatchery3_3_1_2:
             "a_p": [0,1], # proportion of maximum capacity to produce (1)
             "a_a": [0,1], # proportion of fish stocked in Angostura (1)
             "a_i": [0,1], # proportion of fish stocked in Isleta (1)
-            "a_s": [0,1]  # proportion of fish stocked in San Acacia (1)
+            "a_s": [0,1], # proportion of fish stocked in San Acacia (1)
+            "a_c": [0,1]  # proportion of age 0 hatchery-reared fish carried over to next year
         }
 
         return {'states': states,'observations': observations,'actions': actions}

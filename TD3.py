@@ -15,6 +15,7 @@ import os
 import copy
 from ddpg_actor import Actor
 from ddpg_actor_sigsoft import Actor_sigsoft
+from ddpg_actor_sigsoftsig import Actor_sigsoftsig
 from ddpg_actor_tanhsoft import Actor_tanhsoft
 from setup_logger import setup_logger
 from stacking2 import *
@@ -168,7 +169,9 @@ class TD3():
                                     self.actor_lrdecayrate, self.actor_lr, self.fstack).to(self.device)
             #self.actor_local = Actor_tanhsoft(self.state_size*self.fstack, self.action_size, self.actor_hidden_size, self.actor_hidden_num,
             #                        self.actor_lrdecayrate, self.actor_lr, self.fstack).to(self.device)
-
+        elif 'Hatchery3.4' in self.env.envID: # uses sigmoid + softmax + sigmoid output layer
+            self.actor_local = Actor_sigsoftsig(self.state_size*self.fstack, self.action_size, self.actor_hidden_size, self.actor_hidden_num,
+                                    self.actor_lrdecayrate, self.actor_lr, self.fstack).to(self.device)
         else: # uses softmax output layer
             self.actor_local = Actor(self.state_size*self.fstack, self.action_size, self.actor_hidden_size, self.actor_hidden_num,
                                     self.actor_lrdecayrate, self.actor_lr, self.fstack).to(self.device)
