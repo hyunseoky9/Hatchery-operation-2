@@ -10,17 +10,13 @@ import os
 from AR1_normalized import AR1_normalized
 from whitenoise_normalized_otowi import whitenoise_normalized_otowi
 
-class Hatchery3_3_1:
+class Hatchery3_3_1_2:
     """
-    same as 3.2.6, but Bringing back spring production action
-    Action must now be an array of 4 elements: proportiof capacity produced + stocking proportion in angostura, isleta, and san acacia
+    same as 3.3.1 but the fish produced can now be carried over to next year if not stocked.
+    The 2nd year fish must be stocked, cannot be carried over to next year.
     """
     def __init__(self,initstate,parameterization_set,discretization_set,LC_prediction_method, param_uncertainty=0, Rinfo=None):
-        """
-        same as 3.2.6, but adds spring production process, production is no longer fixed to max capacity. production follows the current strategy based on springflow forecast.
-        also the q is otowi flow and forecasts not angostura's flow.
-        """
-        self.envID = 'Hatchery3.3.1'
+        self.envID = 'Hatchery3.3.1.2'
         self.partial = True
         self.episodic = True
         self.absorbing_cut = True # has an absorbing state and the episode should be cut shortly after reaching it.
@@ -224,7 +220,7 @@ class Hatchery3_3_1:
         self.N0_dim = (self.n_reach)
         self.N0CF_dim = (self.n_reach)
         self.N1_dim = (self.n_reach)
-        self.Nh_dim = (1)
+        self.Nh_dim = (2) # hatchery fish now has 2 age classes: age 0 and age 1 (carried over from previous year)
         self.q_dim = (1)
         self.Ne_dim = (1)
         self.t_dim = (1)

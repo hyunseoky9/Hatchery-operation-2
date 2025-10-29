@@ -16,6 +16,7 @@ a3c results/
 rayrllib results/
 figures/
 manuscript_results/ 
+human_play_results/
 pomdp/
 .vscode/
 # Ignore Python cache files and directories
