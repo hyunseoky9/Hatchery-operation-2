@@ -81,6 +81,9 @@ mod8.2 <- DirichReg(Y ~ log_popsize_a+ log_popsize_i+ log_popsize_s+ extinct_a+ 
                       relshare_a + relshare_i,
                     falldf_analysis,model='alternative')  
 
+mod9.2 <- DirichReg(Y ~ log_popsize_a+ log_popsize_i+ log_popsize_s+ relshare_a + relshare_i,
+                    falldf_analysis,model='alternative')  
+
 #summary(mod2)
 #summary(mod3)
 #summary(mod4)
@@ -293,14 +296,14 @@ plot_effect_ternary <- function(fit, df, K = 5, y_cols = c("stock_a","stock_i","
   return(output)
 }
 }
-out <- plot_effect_ternary(mod7.2, falldf_analysis, K = 5,
+out <- plot_effect_ternary(mod9.2, falldf_analysis, K = 5,
                          y_cols = c("stock_a","stock_i","stock_s"),
                          cont_step = "sd")
 out$vecs
 out$top_tbl
 out[[1]]
 # save vecs as csv
-modname= 'mod7.2'
+modname= 'mod9.2'
 ofilename = sprintf('G:/My Drive/research/nmsu/hatchery operation/codes/dynamic programming2/manuscript_results/stockingdistribution_effectvectors_seed%d_paramset%d_c%d_%s.csv',params[1],params[2],params[3],modname)
 write.csv(out$vecs,ofilename,row.names=FALSE)
 
