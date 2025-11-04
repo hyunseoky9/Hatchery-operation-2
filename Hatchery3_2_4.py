@@ -217,7 +217,7 @@ class Hatchery3_2_4:
         self.N1minmax = [0,1e7] # N1 and N1 minmax are the total population minmax.
         self.qminmax = [self.flowmodel.flowmin[0], self.flowmodel.flowmax[0]] # springflow in angostura (abq gauge) unit: m^3
         self.Neminmax = [0, 1e7]
-        self.aminmax = [0, 300000]
+        self.aminmax = [0, self.maxcap]
         # dimension for each variables
         self.N0_dim = (self.n_reach)
         self.N1_dim = (self.n_reach)

@@ -10,17 +10,12 @@ import os
 from AR1_normalized import AR1_normalized
 from whitenoise_normalized_otowi import whitenoise_normalized_otowi
 
-class Hatchery3_3_1:
-    """
-    same as 3.2.6, but Bringing back spring production action
-    Action must now be an array of 4 elements: proportiof capacity produced + stocking proportion in angostura, isleta, and san acacia
-    """
+class Hatchery3_3_4:
     def __init__(self,initstate,parameterization_set,discretization_set,LC_prediction_method, param_uncertainty=0, Rinfo=None):
         """
-        same as 3.2.6, but adds spring production process, production is no longer fixed to max capacity. production follows the current strategy based on springflow forecast.
-        also the q is otowi flow and forecasts not angostura's flow.
+        Same as 3.3.1 but with perfect information on winter mortality for 3 reaches.
         """
-        self.envID = 'Hatchery3.3.1'
+        self.envID = 'Hatchery3.3.4'
         self.partial = True
         self.episodic = True
         self.absorbing_cut = True # has an absorbing state and the episode should be cut shortly after reaching it.
@@ -210,6 +205,8 @@ class Hatchery3_3_1:
         self.popsize_1cpue = 1/(self.avgfallf*self.avgp*self.thetaf*(100/(self.avgeff_fp+self.avgeff_fr))) # average population size that corresponds to 1 cpue given average p, f (fall), and theta (fall) parameter values.
 
 
+        # specify which parameters will have perfect information
+        self.paramswpi = ['lMwmu_a','lMwmu_i','lMwmu_s'] # parameters with perfect information.
 
         # range for each variables
         self.N0minmax = [0,1e7] 
@@ -218,6 +215,7 @@ class Hatchery3_3_1:
         self.Nhminmax = [0,self.maxcap] # hatchery population minmax
         self.qminmax = [self.flowmodel.flowmin[0], self.flowmodel.flowmax[0]] # springflow in Otowi (Otowi gauge) unit: m^3
         self.Neminmax = [0, 1e7]
+        self.paramminmax = [np.min(self.param_uncertainty_df[self.paramswpi],axis=0),np.max(self.param_uncertainty_df[self.paramswpi], axis=0)]
         self.aminmax = [0, self.maxcap]
         self.tminmax = [0,1]
         # dimension for each variables
@@ -228,8 +226,9 @@ class Hatchery3_3_1:
         self.q_dim = (1)
         self.Ne_dim = (1)
         self.t_dim = (1)
-        self.statevar_dim = (self.N0_dim, self.N0CF_dim, self.N1_dim, self.Nh_dim, self.q_dim, self.Ne_dim, self.t_dim)
-        self.obsvar_dim = (self.N0_dim, self.N0CF_dim, self.N1_dim, self.Nh_dim, self.q_dim, self.Ne_dim, self.t_dim)
+        self.paramver_dim = (len(self.paramswpi))
+        self.statevar_dim = (self.N0_dim, self.N0CF_dim, self.N1_dim, self.Nh_dim, self.q_dim, self.Ne_dim, self.paramver_dim, self.t_dim)
+        self.obsvar_dim = (self.N0_dim, self.N0CF_dim, self.N1_dim, self.Nh_dim, self.q_dim, self.Ne_dim, self.paramver_dim, self.t_dim)
         self.action_dim = (1,1,1,1) # 4 actions: proportion of capacity produced + stocking proportion in angostura, isleta, and san acacia.
 
         # starting 3.0, discretization for discrete variables and ranges for continuous variables will be defined in a separate function, state_discretization.
@@ -363,14 +362,20 @@ class Hatchery3_3_1:
             Neval = self._discretize_idx(Neval, self.states['Ne'])
         new_state.append(np.log(Neval+1))
         new_obs.append(np.log(Neval+1))
+
+        # sample
+        if self.param_uncertainty: # self.param_uncertainty should always be True for Hatchery3.3.4
+            self.paramsampleidx = np.random.randint(0, self.param_uncertainty_df.shape[0]) #np.random.choice([178,3898]) #178 #np.random.randint(0, self.param_uncertainty_df.shape[0])
+            paramvals = self.parameter_reset(paramsampleidx) # resample parameters from the posterior distribution
+
+            # parameters with perfect information
+            paramvals = self.param_uncertainty_df[self.paramswpi].iloc[self.paramsampleidx].to_numpy()
+            new_state.append(paramvals)
+            new_obs.append(paramvals)
+
         # t. Always start from fall.
         new_state.append(np.array([1]))
         new_obs.append(np.array([1]))
-
-        # sample
-        if self.param_uncertainty:
-            self.paramsampleidx = np.random.randint(0, self.param_uncertainty_df.shape[0]) #np.random.choice([178,3898]) #178 #np.random.randint(0, self.param_uncertainty_df.shape[0])
-            paramvals = self.parameter_reset(paramsampleidx) # resample parameters from the posterior distribution
 
         self.state = np.concatenate(new_state)
         self.obs = np.concatenate(new_obs)
@@ -516,8 +521,8 @@ class Hatchery3_3_1:
                 logNh_next = np.log(Nh_next+1)
                 logq_next = np.array([np.log(q_next+1)])
                 logqhat_next = np.array([np.log(qhat_next+1)])
-                self.state = np.concatenate([logN0_next, logN0CF_next, logN1_next, logNh_next, logq_next, logNe_next, t_next])
-                self.obs = np.concatenate([logN0_next, logN0CF_next, logN1_next, logNh_next, logqhat_next, logNe_next, t_next])
+                self.state = np.concatenate([logN0_next, logN0CF_next, logN1_next, logNh_next, logq_next, logNe_next, self.state[self.sidx['params']], t_next])
+                self.obs = np.concatenate([logN0_next, logN0CF_next, logN1_next, logNh_next, logqhat_next, logNe_next, self.obs[self.oidx['Oparams']], t_next])
         else: #extinct. terminate
             reward = 0
             extra_info['genetic_reward'] = 0
@@ -555,7 +560,8 @@ class Hatchery3_3_1:
                 "logNh": list(np.log(np.array(self.Nhminmax)+1)), # log spring flow in Otowi (Otowi) (1)
                 "logq": list(np.log(np.array(self.qminmax)+1)), # log spring flow in Otowi (Otowi) (1)
                 "logNe": list(np.log(np.array(self.Neminmax)+1)), # Effective population size of the wild population BEFORE stocking (1)
-                "t": [0,1], # season 0=spring, 1=fall (1)
+                "params": list(np.array([0,1])), # parameters. the min max values here, [0,1], are just placeholders. each parameters have their own min max described in self.paramminmax
+                "t": [0,1] # season 0=spring, 1=fall (1)
             }
             observations = {
                 "OlogN0": states['logN0'],
@@ -564,7 +570,8 @@ class Hatchery3_3_1:
                 "OlogNh": states['logNh'],
                 "Ologq": states['logq'],
                 "OlogNe": states['logNe'],
-                "Ot": states['t'],
+                "Oparams": states["params"],
+                "Ot": states['t']
             }
         # action space is 4 dimensional and each dimension is continuous between 0 and 1.
         actions = {

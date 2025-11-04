@@ -211,7 +211,7 @@ class Hatchery3_2_3:
         self.Neminmax = [0, 1e7]
         self.paramminmax = [np.min(self.param_uncertainty_df,axis=0),np.max(self.param_uncertainty_df, axis=0)]
         #self.paramverminmax = [0,1] # version of parameters used in the environment. 0= 178, 1=3898
-        self.aminmax = [0, 300000]
+        self.aminmax = [0, self.maxcap]
         # dimension for each variables
         self.N0_dim = (self.n_reach)
         self.N1_dim = (self.n_reach)
