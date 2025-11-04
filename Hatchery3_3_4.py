@@ -207,6 +207,8 @@ class Hatchery3_3_4:
 
         # specify which parameters will have perfect information
         self.paramswpi = ['lMwmu_a','lMwmu_i','lMwmu_s'] # parameters with perfect information.
+        self.parammean = np.mean(self.param_uncertainty_df[self.paramswpi], axis=0)
+        self.paramvar = np.var(self.param_uncertainty_df[self.paramswpi], axis=0)
 
         # range for each variables
         self.N0minmax = [0,1e7] 
