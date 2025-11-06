@@ -524,7 +524,7 @@ class Hatchery3_3_4:
                 logq_next = np.array([np.log(q_next+1)])
                 logqhat_next = np.array([np.log(qhat_next+1)])
                 self.state = np.concatenate([logN0_next, logN0CF_next, logN1_next, logNh_next, logq_next, logNe_next, self.state[self.sidx['params']], t_next])
-                self.obs = np.concatenate([logN0_next, logN0CF_next, logN1_next, logNh_next, logqhat_next, logNe_next, self.obs[self.oidx['Oparams']], t_next])
+                self.obs = np.concatenate([logN0_next, logN0CF_next, logN1_next, logNh_next, logqhat_next, logNe_next, self.state[self.sidx['params']], t_next])
         else: #extinct. terminate
             reward = 0
             extra_info['genetic_reward'] = 0
@@ -791,8 +791,6 @@ class Hatchery3_3_4:
                 inverseweight = (1/(Nr + 1))/np.sum(1/(Nr + 1)) # add 1 to avoid division by zero
                 leftoverstock = inverseweight*leftover
                 stock[0:self.n_reach] = stock[0:self.n_reach] + leftoverstock
-        if np.sum(stock) == 0:
-            foo = 0
         stock_prop = stock/np.sum(stock)
         return stock_prop
 

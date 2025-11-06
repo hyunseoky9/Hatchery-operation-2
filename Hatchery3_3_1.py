@@ -782,8 +782,6 @@ class Hatchery3_3_1:
                 inverseweight = (1/(Nr + 1))/np.sum(1/(Nr + 1)) # add 1 to avoid division by zero
                 leftoverstock = inverseweight*leftover
                 stock[0:self.n_reach] = stock[0:self.n_reach] + leftoverstock
-        if np.sum(stock) == 0:
-            foo = 0
         stock_prop = stock/np.sum(stock)
         return stock_prop
 

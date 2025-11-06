@@ -59,11 +59,12 @@ class FixedMeanStd:
 
     def normalize(self, x):
         # check if there is a variable self.envID
+        y = np.asarray(x, dtype=np.float32).copy()
         if hasattr(self, 'envID'):
             if 'Hatchery3.3' in self.envID or 'Hatchery3.4' in self.envID:
-                x[0:-1] = (x[0:-1] - self.mean[0:-1]) / np.sqrt(self.var[0:-1] + 1e-8)
-                return x
+                y[0:-1] = (y[0:-1] - self.mean[0:-1]) / np.sqrt(self.var[0:-1] + 1e-8)
+                return y
             else:
-                return (x - self.mean) / np.sqrt(self.var + 1e-8)
+                return (y - self.mean) / np.sqrt(self.var + 1e-8)
         else:
-            return (x - self.mean) / np.sqrt(self.var + 1e-8)
+            return (y - self.mean) / np.sqrt(self.var + 1e-8)

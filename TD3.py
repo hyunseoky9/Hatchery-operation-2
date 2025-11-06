@@ -263,7 +263,6 @@ class TD3():
         states, actions, rewards, dones, next_states = (
             tensor.to(self.device) for tensor in experiences
         )
-
         # critic target 
         with torch.no_grad():
             logits_next = self.actor_target.body(next_states) # shape [B, K]
