@@ -1,10 +1,12 @@
 # Hatchery operation project
+
+This repository contains the codes for developing a hatchery augmentation decision tool for RGSM conservation using deep reinforcement learning.
+
 ## Code Scripts
 
-### environment classes
+### Simulation environment classes
 
-Toy RGSM hatchery augmentation environments:
-mock models
+Toy RGSM hatchery mock augmentation environments
 - *env0_0.py*: mock model of env1.0 made for practicing tabular Q learning. Practically useless now.
 - *env1_0.py*: first mock model for hatchery operation and population dynamics
 - *env1_1.py*: continuous state space from env1.0
@@ -16,12 +18,19 @@ mock models
 - *env2_4.py*: same as Env2.0 but catch (y) is observed every season (both in fall and spring) (most accurate of 2.x)
 - *env2_5.py*: same as Env2.0 but catch (y) is observed every season and is continuous (both in fall and spring)
 real-deals
+
+Implementation grade RGSM hatchery augmentation environments
 - *Hatchery3_0.py*: environment for the hatchery problem implementation-grade parameterization. uses Allelic richness as a genetic diversity variable and it affects the reproduction process. (deprecated)
 - *Hatchery3_1.py*:  environment for the hatchery problem implementation-grade parameterization. uses heterozygosity as a genetic diversity variable but it does not affect the demographic process unlike Hatchery3_0. (useful for assessing heterozygosity dynamics)
 - *Hatchery3_2.py*: uses effective popualtion size. Still has to take spring production action and stocking actions have to be taken one reach at a time, and it's for Q-learning. (not that useful)
 - *Hatchery3_2_2.py*: Same as hatchery 3.2, but all the fall actions are taken at once, and spring decision is not taken. MAIN MODEL USED FOR THE PROJECT. You can incorporate uncertainty in the parameters as well sampling from the posterior distribution.
 - *Hatchery3_2_3.py*: Same as hatchery 3.2.2, but all the population parameters are observable.
 - *Hatchery3_2_4.py*: Same as hatchery 3.2.2, but simulation does not terminate anymore. If the subpopulation goes below its local threshold, the subpopulation will fall to 0. Even all subpopulation goes to 0, the populatin will keep going
+- *Hatcher3_3_1.py*: Same as hatchery 3.2.4, but the fall and spring seasons are now split into two different steps. Actions are also different; it's still a vector of length 4 but the first element is production and the other three are stocking distributions. This is the main environment for the final analysis.
+- *Hatchery3_3_2.py*: Same as hatchery 3.3.2, but an easier version where the "spring" timestep is assumed to be physically same time as the fall timestep. This was done to see if the DRL could learn on this easier dynamics
+- *Hatchery3_3_3.py*: even easeir version of hatchery 3.3.2 where there's no separation of seasons but the actions are still production and distribution instead of distribution and discarding as in 3.2.x
+- *Hatchery3_3_4.py*: same as hatchery 3.3.1 but has perfect information on some of the parameters. You can specify which parameters you want to have perfect info on.
+- *Hatchery3_4_1.py*: same as hatchery 3.3.1 but you can carry over the produced fish for 1 year.
   
 Tiger POMDP (Chades et al. 2008)
 - *tiger.py*: Tiger POMDP used for testing DRQN
@@ -30,6 +39,9 @@ Tiger POMDP (Chades et al. 2008)
 
 
 ### Algorithm running / plotting and analyzing outputs
+
+These jupytre notebooks are not available on this repository (ignored when committing) so that I won't have to constantly commit the changes made whenever run the optimization process.
+
 - *env1.0_performance_testing.ipynb*: compute average reward for a given policy
 - *env1.0_plotting_running.ipynb*: running optimization algorithms (value iteration, Tabular Q learning, DeepQN, etc.) and then analyzing/plotting the results for env1.0
 - *env0.0_plotting_running.ipynb*: same as above but for env0.0
@@ -76,7 +88,10 @@ Tiger POMDP (Chades et al. 2008)
 - *RunningMeanStd.py*: standardizing class object. updates the mean and std for standardization during the training simulation dynamically.
 - *FixedMeanStd.py*: standardizing class object. Unlike runningmeanstd, the mean and std are fixed. Fixed values were obtained from independent simulations not taking any actions. works better than running mean std, so this is used for all td3 training for this proj. s
 - *absorbing.py*: function that returns true if the input state is an absorbing, simulation-terminating state.
-#### Bash scripts
+#### Bash scripts and others related to utilizing HPC and AWS 
+- job_td3.sh: bash script that starts the td3 training process for launch ID. run with "./job_td3.sh (launch id specified ). Mainly used for AWS
+- job_envx_xx.sh: SLURM script for sending in a job to the HPC.
+*(algorithm)_(env name)_x_main_HPC.py*: python script that starts the training process using specified algorithm and env name. 
 *tiger_performance_printout_search.py*: goes through the .out files created from the HPC jobs and finds episodes that has high performance with certain policy attributes (e.g., policy has both managing and surveying). 
 *env2_x_performance_printout_search.py*: same as above but for env2.x's.
 
@@ -160,12 +175,6 @@ These are outputs that aren't Q,V, or policy outputs but outputs made by the alg
 
 - persistence_probabilities_Hatchery3.2.2.pkl - persistence probability for every different parameter sample from the posterior distribution.
 
-## Environments.
-- *Env0.0*: Second environment model made. Drastically simplified version of Env1.0. It was made to practice the tabular Q learning. Now that I've moved on from tabular Q learning, it is no longer relevant.
-- *Env1.0*: First environmental model ever made. Has genetic and demographic component of the augmentation environment. See document in overleaf.
-- *Env1.1*: 
-
-
 ## Hyperparameter sets (in /hyperparamsets)
 
 Collection of hyperparameters used to run Deep Q network and other network based algorithms (policy gradient). Shows performance of the set used as well.
@@ -176,4 +185,4 @@ Collection of hyperparameters used to run Deep Q network and other network based
 
 
 ## ETC.
-when making new environmnet.txt: when you make a new environment, make sure those environments are registerd in the python files listed in this text file.
+.txt: when you make a new environment, make sure those environments are registerd in the python files listed in this text file.
