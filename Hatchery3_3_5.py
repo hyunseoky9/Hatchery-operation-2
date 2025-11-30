@@ -8,20 +8,14 @@ import pandas as pd
 import sys
 import os
 from AR1_normalized import AR1_normalized
-from whitenoise_normalized import whitenoise_normalized
+from whitenoise_normalized_otowi import whitenoise_normalized_otowi
 
-class Hatchery3_2_5:
-    """
-    Same as hatchery 3.2, but all the fall actions are taken at once, and spring decision is not taken. It's assumed that maximum capacity is produced every year.
-    action is a vector of 4, where the first three are stocking proportions in angostura, isleta, and san acacia, and the last one is the discard proportion.
-    Another fix from Hatchery3_2 is that calculating wild Ne uses only wild origin N0 (N0CF; N0 counter-factual). This prevents double dipping in the R-L equation
-    ensuring that Ne,w in the R-L only includes wild-origin spawners. This was not possible in 3.2 because stocked fish were baked into N0 during fall timesteps (t=1,2,3)
-    """
+class Hatchery3_3_5:
     def __init__(self,initstate,parameterization_set,discretization_set,LC_prediction_method, param_uncertainty=0, Rinfo=None):
         """
-        same as 3.2.4, but adds spring production process, production is no longer fixed to max capacity. production follows the current strategy based on springflow forecast.
+        same as 3.3.1, but no more genetic process and genetic cost. Instead, you have economic cost that accounts for financial and implicit labor cost.
         """
-        self.envID = 'Hatchery3.2.5'
+        self.envID = 'Hatchery3.3.5'
         self.partial = True
         self.episodic = True
         self.absorbing_cut = True # has an absorbing state and the episode should be cut shortly after reaching it.
@@ -117,10 +111,10 @@ class Hatchery3_2_5:
 
         # start springflow simulation model and springflow-to-"Larval carrying capacity" model.
         #self.flowmodel = AR1_normalized()
-        self.flowmodel = whitenoise_normalized()
-        #self.Otowi_minus_ABQ_springflow = self.flowmodel.constants[0] - self.flowmodel.constants[1] # difference between Otowi and ABQ springflow
-        #self.Otowi_minus_SA_springflow = self.flowmodel.constants[0] - self.flowmodel.constants[2] # difference between Otowi and San Acacia springflow
-        self.ABQ_minus_SA_springflow = self.flowmodel.constants[0] - self.flowmodel.constants[1] # difference between ABQ and San Acacia springflow
+        self.flowmodel = whitenoise_normalized_otowi()
+        self.Otowi_minus_ABQ_springflow = self.flowmodel.constants[0] - self.flowmodel.constants[1] # difference between Otowi and ABQ springflow
+        self.Otowi_minus_SA_springflow = self.flowmodel.constants[0] - self.flowmodel.constants[2] # difference between Otowi and San Acacia springflow
+        #self.ABQ_minus_SA_springflow = self.flowmodel.constants[0] - self.flowmodel.constants[1] # difference between ABQ and San Acacia springflow
         self.LC_prediction_method = LC_prediction_method # 0=HMM, 1=GAM
 
         #self.flowmodel = AR1_normalized()
@@ -141,69 +135,6 @@ class Hatchery3_2_5:
             with open('LC_GAM_San Acacia.pkl','rb') as handle:
                 self.LC_SA = pickle.load(handle)
 
-        # get some parameters for effective population size calculation
-        ## get log(kappa) probability distribution and domain values
-        with open('lkappa_dataset.pkl', 'rb') as handle:
-            lkappa_dataset = pickle.load(handle)
-
-        if self.param_uncertainty:
-            with open('lkappa_allposterior_dataset_copy.pkl', 'rb') as handle:
-                self.lkappa_allposterior = pickle.load(handle)
-
-        self.lkappa_prob = lkappa_dataset['lkappaprob']
-        self.angolkappa_midvalues = lkappa_dataset['angolkappa_midvalues']
-        self.isllkappa_midvalues = lkappa_dataset['isllkappa_midvalues']
-        A,B             = np.meshgrid(self.angolkappa_midvalues,
-                                    self.isllkappa_midvalues,
-                                    indexing='ij')
-        mask            = self.lkappa_prob > 1e-3            # keep only useful combos
-        self.kappa_exp  = np.exp(np.stack([A[mask], B[mask], B[mask]], axis=-1))  # (nκ,3)
-        self.kappa_prob = self.lkappa_prob[mask]             # (nκ,)
-        
-
-        ## calculate different alpha values (number of eggs produced per spawner) and their probabilities in the posterior distribution
-        ## (used for calculating sigma^2_{b_w} in the document Hatchery 3.2).
-        # define ends (95% CI) of the posterior distribution
-        alphainterval = np.linspace(self.alpha - 1.96*np.sqrt(self.alphavar), self.alpha + 1.96*np.sqrt(self.alphavar), 11)
-        # calculate the probability for each bin
-        self.alphaprob = norm.cdf(alphainterval[1:], loc=self.alpha, scale=np.sqrt(self.alphavar)) - norm.cdf(alphainterval[:-1], loc=self.alpha, scale=np.sqrt(self.alphavar))
-        self.alpha_centers = np.maximum((alphainterval[:-1] + alphainterval[1:]) / 2,0)
-
-        self.alpha_vec  = np.hstack((self.alpha, self.alpha_centers))  # (nα,)
-        ## get the probability distribution of river drying, delfall, and avg deldiff.
-        bins = 5
-        intervals = np.linspace(0,1,bins+1) # bin boundaries
-        delfall_i = np.array([self.delfall[0,1],self.delfall[1,1]]) # isleta alpha beta
-        delfall_s = np.array([self.delfall[0,2],self.delfall[1,2]]) # san acacia alpha beta
-        delfallprob_i = beta.cdf(intervals[1:], a=delfall_i[0], b=delfall_i[1]) - beta.cdf(intervals[:-1], a=delfall_i[0], b=delfall_i[1])
-        delfallprob_s = beta.cdf(intervals[1:], a=delfall_s[0], b=delfall_s[1]) - beta.cdf(intervals[:-1], a=delfall_s[0], b=delfall_s[1])
-        delmid_values = (intervals[:-1] + intervals[1:]) / 2 # get the mid value for each bin
-        deldiffavg = np.zeros(self.n_reach)
-        deldiffavg[1:] = self.deldiff[0,1:] / np.sum(self.deldiff,axis=0)[1:] # average value for deldiff. angostura value is 0
-
-        ## get expected survival rates for age1+ and age 0
-        M0 = np.exp(self.lM0mu)
-        M1 = np.exp(self.lM1mu)
-        Mw = np.exp(self.lMwmu)
-        combo = np.array(list(itertools.product(delmid_values, delmid_values)))
-        self.combo_delfallprob = np.array(list(itertools.product(delfallprob_i, delfallprob_s)))
-        self.combo_delfallprob = np.prod(self.combo_delfallprob, axis=1) # product of delfall probabilities
-        valididx = np.where(self.combo_delfallprob > 1e-2)[0] # only keep the combinations with probability greater than 1e-3
-        self.combo_delfallprob = self.combo_delfallprob[valididx] # only keep the valid combinations
-        delfall = np.column_stack((np.zeros(combo.shape[0]),combo))
-        delfall = delfall[valididx,:] # only keep the valid combinations
-        self.sj = np.exp(-124*M0 - 150*Mw)*((1 - delfall) + self.tau*delfall*deldiffavg + (1 - self.tau)*self.r0*np.mean(self.phidiff))
-        self.sa = np.exp(-124*M1 - 150*Mw)*((1 - delfall) + self.tau*delfall + (1 - self.tau)*self.r1*np.mean(self.phifall))
-        self.sj =  np.prod(self.sj,axis=1)**(1/self.sj.shape[1]) # geometric mean of sj
-        self.sa =  np.prod(self.sa,axis=1)**(1/self.sa.shape[1]) # geometric mean of sa
-
-        ## get average of age 2+ fish 
-        self.avgsa = np.sum(self.sa * self.combo_delfallprob)
-        self.AVGage_of_age2plus = 2*(1/(1+self.avgsa)) + 3*(self.avgsa/(1+self.avgsa)) # assume that the fish only lives till age 3
-        
-        # number of broodstock used for producing maximum capacity. Assumes maximum capacity is produced every year.
-        self.stockreadyfish_per_female = np.median([645.4969697,962.1485714,743.7636364,354.9875,634.92]) # first four values from bio park, 5th value from dexter. 
-        # the value 1000 is Thomas' ballpark estimate of stock-ready fish produced per female
 
         # observation related parameters
         self.avgp = np.mean([self.p0, self.p1]) # average p
@@ -216,19 +147,18 @@ class Hatchery3_2_5:
         self.N0minmax = [0,1e7] 
         self.N1minmax = [0,1e7] # N1 and N1 minmax are the total population minmax.
         self.Nhminmax = [0,self.maxcap] # hatchery population minmax
-        self.qminmax = [self.flowmodel.flowmin[0], self.flowmodel.flowmax[0]] # springflow in Angostura (ABQ gauge) unit: m^3
-        self.Neminmax = [0, 1e7]
+        self.qminmax = [self.flowmodel.flowmin[0], self.flowmodel.flowmax[0]] # springflow in Otowi (Otowi gauge) unit: m^3
         self.aminmax = [0, self.maxcap]
+        self.tminmax = [0,1]
         # dimension for each variables
         self.N0_dim = (self.n_reach)
         self.N1_dim = (self.n_reach)
         self.Nh_dim = (1)
         self.q_dim = (1)
-        self.Ne_dim = (1)
-        
-        self.statevar_dim = (self.N0_dim, self.N1_dim, self.Nh_dim, self.q_dim, self.Ne_dim)
-        self.obsvar_dim = (self.N0_dim, self.N1_dim, self.Nh_dim, self.q_dim, self.Ne_dim)
-        self.action_dim = (1,1,1,1) # 4 actions: stocking proportion in angostura, isleta, and san acacia, and discard rest.
+        self.t_dim = (1)
+        self.statevar_dim = (self.N0_dim, self.N1_dim, self.Nh_dim, self.q_dim, self.t_dim)
+        self.obsvar_dim = (self.N0_dim, self.N1_dim, self.Nh_dim, self.q_dim, self.t_dim)
+        self.action_dim = (1,1,1,1) # 4 actions: proportion of capacity produced + stocking proportion in angostura, isleta, and san acacia.
 
         # starting 3.0, discretization for discrete variables and ranges for continuous variables will be defined in a separate function, state_discretization.
         discretization_obj = self.state_discretization(discretization_set)
@@ -290,6 +220,9 @@ class Hatchery3_2_5:
         self.state, self.obs = self.reset(initstate)
 
     def reset(self, initstate=None,paramsampleidx =None):
+        """
+        Reset the environment to an initial state and return the initial observation. Always start from fall.
+        """
         if type(initstate) is not np.ndarray:
             initstate = np.ones(len(self.statevar_dim))*-1
         
@@ -306,6 +239,7 @@ class Hatchery3_2_5:
         else:
             new_state.append(np.array([initstate[0]]))
             new_obs.append(np.array([initstate[0]]))
+
         # N1 & ON1
         if initstate[1] == -1:
             # N1val = random.choices(list(np.arange(1, len(self.states['N1']))), k = self.statevar_dim[1])
@@ -315,6 +249,7 @@ class Hatchery3_2_5:
             new_state.append(np.array([initstate[1]]))
             new_obs.append(np.array([initstate[1]]))
 
+        # draw springflow and forecast for Nh, q, and qhat
         if self.discset == -1:
             qvalNforecast = self.flowmodel.nextflowNforecast()
             qval = np.array([np.log(qvalNforecast[0] + 1)])
@@ -324,31 +259,24 @@ class Hatchery3_2_5:
 
         # Nh
         if initstate[2] == -1:
-            production = self.production_target(otowi_forecast) # production target based on the initiated springflow forecast
+            production = 0 # start with no fish. #self.production_target(otowi_forecast) # production target based on the initiated springflow forecast
             new_state.append(np.array([np.log(production + 1)])) 
             new_obs.append(np.array([np.log(production + 1)]))
         else:
             new_state.append(np.array([initstate[2]]))
             new_obs.append(np.array([initstate[2]]))
 
-        # q & qhat
+        # q & qhat (observed flow)
         if initstate[3] == -1:
             new_state.append(qval)
-            new_obs.append(qval)
+            new_obs.append(qval) # in fall springflow is already observed without error
         else:
             new_state.append(np.array([initstate[3]]))
             new_obs.append(np.array([initstate[3]]))
 
-        # Ne & ONe
-        if self.discset == -1:
-            Neval = np.array([np.sum(np.exp(N0val)-1 + np.exp(N1val)-1)*0.6])
-            #Neval,_,_ = self.NeCalc(np.exp(N0val)-1, np.exp(N1val)-1, pval[0], Nbval[0])
-        else:
-            Neval = np.array([np.sum(np.exp(N0val)-1 + np.exp(N1val)-1)*0.6])
-            #Neval,_,_ = self.NeCalc(np.exp(N0val)-1, np.exp(N1val)-1, pval, Nbval)
-            Neval = self._discretize_idx(Neval, self.states['Ne'])
-        new_state.append(np.log(Neval+1))
-        new_obs.append(np.log(Neval+1))
+        # t. Always start from fall.
+        new_state.append(np.array([1]))
+        new_obs.append(np.array([1]))
 
         # sample
         if self.param_uncertainty:
@@ -363,7 +291,7 @@ class Hatchery3_2_5:
     def step(self, a, current_strategy = 0):
         """
         Take an action and return the next state, reward, done flag, and extra information.
-        a is a vector of 4, where the first three are stocking proportions in angostura, isleta, and san acacia, and the last one is the discard proportion.
+        a is a vector of 4, where the first is the proportion of production and the rest three are stocking proportions in angostura, isleta, and san acacia.
         current_strategy=1 takes the production action and stocking action based on the currently carried out heuristic stocking strategy.
         """
         extra_info = {}
@@ -372,133 +300,110 @@ class Hatchery3_2_5:
             N1 = np.exp(np.array(self.state)[self.sidx['logN1']]) - 1
             Nh = np.exp(np.array(self.state)[self.sidx["logNh"]]) - 1
             q = np.exp(np.array(self.state)[self.sidx["logq"]]) - 1
-            Ne = np.exp(np.array(self.state)[self.sidx["logNe"]]) - 1
-        else:
-            N0 = np.array(self.states["N0"])[np.array(self.state)[self.sidx['N0']]]
-            N1 = np.array(self.states["N1"])[np.array(self.state)[self.sidx['N1']]]
-            Nh = np.array(self.states["Nh"])[np.array(self.state)[self.sidx['Nh']]]
-            q = np.array(self.states["q"])[np.array(self.state)[self.sidx['q']]]
-            Ne = np.array(self.states['Ne'])[np.array(self.state)[self.sidx['Ne']]]
+            t = self.state[self.sidx['t']][0]
         totN0 = np.sum(N0)
         totN1 = np.sum(N1)
         Nr = N0 + N1 # population size in each reach
         if current_strategy == 1: 
-            #a = self.stocking_decision() # stocking decision based on monitoring samples in september/october
-            a = self.stocking_decision2(N0,N1) # stocking decision based on current strategy when assuming that you can observe the population size through IPM.
+            if t == 0: # spring
+                prod_target = self.production_target(np.exp(self.obs[self.oidx['Ologq']])-1)
+                prod_target = np.array([min(prod_target, self.maxcap)/self.maxcap])
+                a = np.concatenate((prod_target,[0,0,0])) # production target based on the observed springflow forecast
+            else:
+                a = np.concatenate(([0],self.stocking_decision3(N0,N1))) # stocking decision based on current strategy when assuming that you can observe the population size through IPM.
             extra_info['current_strat_action'] = a
-        a = a[0:self.n_reach] # only take the first n_reach elements of the action vector
+        a_prod = a[0] # production action
+        a_stock = a[1:]
+        a_stock = a_stock[0:self.n_reach]
         totpop = totN0 + totN1
+        # switch season 
+        t_next = np.array([(t + 1) % 2]) # 0 is spring and 1 is fall
+        if np.sum(Nr) > 0:
+            if t == 1: # fall
+                # demographic stuff (stocking and winter survival)
+                Mw = np.exp(self.lMwmu) #np.exp(np.random.normal(self.lMwmu, self.lMwsd))
+                stockedNsurvived = np.round(a_stock*Nh)*self.irphi
+                #print(f'x in fall {np.sum(stockedNsurvived)/np.sum((N0+stockedNsurvived))}')
+                N0CF = N0.copy()*np.exp(-150*Mw) # counterfactual N0, if no stocking had been done. Also equivalent to wild-origin spawners.
+                extra_info['Mw'] = Mw
+                N0 = N0 + stockedNsurvived # stocking san acacia (t=3) in the fall
+                N0 = np.minimum(N0*np.exp(-150*Mw),np.ones(self.n_reach)*self.N0minmax[1]) # stocking san acacia (t=3) in the fall
+                N1 = N1*np.exp(-150*Mw)
 
-        # demographic stuff (stocking and winter survival)
-        Mw = np.exp(self.lMwmu) #np.exp(np.random.normal(self.lMwmu, self.lMwsd))
-        stockedNsurvived = np.round(a*Nh[0])*self.irphi
-        N0CF = N0.copy()*np.exp(-150*Mw) # counterfactual N0, if no stocking had been done. Also equivalent to wild-origin spawners.
-        N0 = N0 + stockedNsurvived # stocking san acacia (t=3) in the fall
-        N0 = np.minimum(N0*np.exp(-150*Mw),np.ones(self.n_reach)*self.N0minmax[1]) # stocking san acacia (t=3) in the fall
-        N1 = N1*np.exp(-150*Mw)
-        p = stockedNsurvived*np.exp(-150*Mw) # Total number of fish stocked in a season that make it to breeding season
-        Nb = 2*Nh[0]/self.stockreadyfish_per_female
-        Ne_score, Neh, Ne_base = self.NeCalc0(N0,N1,p,Nb,None,None,1)
-        extra_info['Ne_score'] = Ne_score # Ne_score is the Ne until you stock in the next fall.
-        # demographic stuff (reproductin and summer survival)
+                # local extinction if the population goes below the local threshold
+                for r in range(self.n_reach):
+                    if N0[r] + N1[r] < self.Nth_local[r]:
+                        N0[r], N1[r], N0CF[r] = 0, 0, 0
+                Nr_spring = N0 + N1
+                # reward & done
+                persistence_reward = np.sum(self.c/3*((Nr_spring>self.Nth_local).astype(int)))
+                extra_info['persistence_reward'] = persistence_reward
+                reward = persistence_reward
 
-        delfall = np.concatenate(([self.delfall[0][0]],np.random.beta(self.delfall[0][1:],self.delfall[1][1:])))
-        deldiff = np.concatenate(([self.deldiff[0][0]],np.random.beta(self.deldiff[0][1:],self.deldiff[1][1:])))
-        L, abqsf, sasf = self.q2LC(q)
-        extra_info['L'] = L
-        extra_info['abqsf'] = abqsf
-        extra_info['sasf'] = sasf
-        natural_capacity = np.random.normal(self.mu, self.sd)
-        kappa = np.exp(self.beta*(L - self.Lmean) + natural_capacity)
-        extra_info['natural_capacity'] = natural_capacity
-        extra_info['kappa'] = kappa
-        # local extinction if the population goes below the local threshold
-        for r in range(self.n_reach):
-            if N0[r] + N1[r] < self.Nth_local[r]:
-                N0[r], N1[r] = 0, 0
-        Nr_spring = N0 + N1
-        effspawner = N0 + self.beta_2*N1 # effective number of spawners
-        P1 = (self.alpha*N0)/(1 + self.alpha*effspawner/kappa) # number of recruits produced by age 1 fish that newly became adults
-        P2 = (self.alpha*self.beta_2*N1)/(1 + self.alpha*effspawner/kappa) # number of recruits produced by age 2+ fish
-        P = (self.alpha*effspawner)/(1 + self.alpha*effspawner/kappa)
-        M0 = np.exp(np.random.normal(self.lM0mu, self.lM0sd))
-        M1 = np.exp(np.random.normal(self.lM1mu, self.lM1sd))
-        if np.sum(P)>0:
-            genT = (np.sum(P1) + np.sum(P2)*self.AVGage_of_age2plus)/np.sum(P)  # generation time
-            N0_next = np.minimum(P*np.exp(-124*M0)*((1 - delfall) + self.tau*delfall*deldiff + (1 - self.tau)*self.r0*self.phidiff),np.ones(self.n_reach)*self.N0minmax[1])
-            N1_next = np.minimum((N0+N1)*np.exp(-215*M1)*((1-delfall) + self.tau*delfall + (1 - self.tau)*self.r1*self.phifall),np.ones(self.n_reach)*self.N1minmax[1])
-            # Ne calculation
-            #Ne_CF, _, _ = self.NeCalc0(N0CF,N1,p,self.Nb,genT,kappa,0) # Ne if no stocking had been done
-            if np.sum(N0CF+N1)>0:
-                Ne_next, _, _ = self.NeCalc0(N0CF,N1,None,None,genT,kappa,0) # N0CF is used because we need to keep track of the wild effective population size. 
-            else: 
-                Ne_next = np.array([0])
-            extra_info['Ne'] = Ne_next # Ne_wild is the Ne until you stock in the next fall.
-        else: 
-            N0_next = N0
-            N1_next = N1
-            Ne_next = np.array([0])
-        juvmortality = np.exp(-124*M0-150*Mw)*((1 - delfall) + self.tau*delfall*deldiff + (1 - self.tau)*self.r0*self.phidiff)
-        adultmortality = np.exp(-215*M1-150*Mw)*((1 - delfall) + self.tau*delfall + (1 - self.tau)*self.r1*self.phifall)
-        extra_info['juvM'] = juvmortality
-        extra_info['adultM'] = adultmortality
-        extra_info['P'] = P
+                # hydrological stuff
+                qNforecast = self.flowmodel.nextflowNforecast() # springflow and forecast in spring
+                #q_next = q_next[0][0]
+                q_next = qNforecast[0]
+                qhat_next = qNforecast[1][1] # otowi springflow forecast
+                N0_next = N0
+                N1_next = N1
+                Nh_next = np.array([0])
+            else: # spring
+                # demographic stuff (reproductin and summer survival)
 
-        # hydrological stuff
-        qNforecast = self.flowmodel.nextflowNforecast() # springflow and forecast in spring
-        #q_next = q_next[0][0]
-        q_next = qNforecast[0]
-        forecast = np.array([qNforecast[1][1]]) # otowi springflow forecast
-        # hatchery production for next year
-        Nh_next = np.array([self.production_target(forecast)]) # production target based on the springflow forecast
-        #print(f'qnext: {np.round(q_next*8.107*(10**-7),3)}, forecast: {np.round(forecast[0]*8.107*(10**-7),3)}, production: {Nh_next[0]:.2f}')
-        #extra_info['Ne_imp'] = ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])) # Ne_CF is the Ne if no stocking had been done.
-        #if ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])) >=0:
-        #    print(f'negative impact on Ne smaller than positive impact on Ne: {(np.log(Ne_score)[0] - np.log(Ne_base) + np.log(Ne_next)[0] - np.log(Ne_CF)[0]):.3f}')
-        #else:
-        #    print(f'negative impact on Ne larger than positive impact on Ne: {(np.log(Ne_score)[0] - np.log(Ne_base) + np.log(Ne_next)[0] - np.log(Ne_CF)[0]):.3f}')
-        # reward & done
-        if Ne_score ==0 or Ne_base==0:
-            genetic_reward = (np.log(Ne_score+1)[0] - np.log(Ne_base+1))
-            #genetic_reward = np.log(Ne_score+1)[0]
-        else:
-            genetic_reward = (np.log(Ne_score)[0] - np.log(Ne_base)) # + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])
-           # genetic_reward = np.log(Ne_score)[0]
-        persistence_reward = np.sum(self.c/3*((Nr_spring>self.Nth_local).astype(int)))
-        extra_info['genetic_reward'] = genetic_reward
-        extra_info['persistence_reward'] = persistence_reward
+                delfall = np.concatenate(([self.delfall[0][0]],np.random.beta(self.delfall[0][1:],self.delfall[1][1:])))
+                deldiff = np.concatenate(([self.deldiff[0][0]],np.random.beta(self.deldiff[0][1:],self.deldiff[1][1:])))
+                L, abqsf, sasf = self.q2LC(q)
+                #extra_info['L'] = L
+                #extra_info['abqsf'] = abqsf
+                #extra_info['sasf'] = sasf
+                natural_capacity = np.random.normal(self.mu, self.sd)
+                kappa = np.exp(self.beta*(L - self.Lmean) + natural_capacity)
+                #extra_info['natural_capacity'] = natural_capacity
+                #extra_info['kappa'] = kappa
 
-        if self.Rinfo['no_genetics']==1:
-            reward = persistence_reward
-        else:
-            reward = persistence_reward + genetic_reward
-        # np.sum(self.c/3*((Nr>self.Nth_local).astype(int))) + genetic_reward
-        # self.c + genetic_reward 
-        # np.sum(self.c/3*((Nr>self.popsize_1cpue).astype(int))) + genetic_reward 
-        # self.c + genetic_reward  
-        #np.sum(c/3*((Nr>Nth_local).astype(int))) + ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0])) 
-        # np.log(np.sum(N0_next+N1_next)) #1 + ((np.log(Ne_score)[0] - np.log(Ne_base)) + (np.log(Ne_next)[0] - np.log(Ne_CF)[0]))  
-        # 100 + np.log(Ne_score)[0]   
-        # self.extant +  #self.extant*(1/(1+np.exp(-0.001*(np.sum(N0+N1) - (np.log(1/0.01 - 1)/0.001) + self.Nth)))) # 0.001 = k, 0.01 = percentage of self.extant at Nth
-        done = False
+                effspawner = N0 + self.beta_2*N1 # effective number of spawners
+                P1 = (self.alpha*N0)/(1 + self.alpha*effspawner/kappa) # number of recruits produced by age 1 fish that newly became adults
+                P2 = (self.alpha*self.beta_2*N1)/(1 + self.alpha*effspawner/kappa) # number of recruits produced by age 2+ fish
+                P = (self.alpha*effspawner)/(1 + self.alpha*effspawner/kappa)
+                M0 = np.exp(np.random.normal(self.lM0mu, self.lM0sd))
+                M1 = np.exp(np.random.normal(self.lM1mu, self.lM1sd))
+                if np.sum(P)>0:
+                    N0_next = np.minimum(P*np.exp(-124*M0)*((1 - delfall) + self.tau*delfall*deldiff + (1 - self.tau)*self.r0*self.phidiff),np.ones(self.n_reach)*self.N0minmax[1])
+                    N1_next = np.minimum((N0+N1)*np.exp(-215*M1)*((1-delfall) + self.tau*delfall + (1 - self.tau)*self.r1*self.phifall),np.ones(self.n_reach)*self.N1minmax[1])
+                else: 
+                    N0_next = N0
+                    N1_next = N1
+                    #juvmortality = np.exp(-124*M0-150*Mw)*((1 - delfall) + self.tau*delfall*deldiff + (1 - self.tau)*self.r0*self.phidiff)
+                    #adultmortality = np.exp(-215*M1-150*Mw)*((1 - delfall) + self.tau*delfall + (1 - self.tau)*self.r1*self.phifall)
+                    #extra_info['juvM'] = juvmortality
+                    #extra_info['adultM'] = adultmortality
+                    #extra_info['P'] = P
 
-        # update state & obs
-        if self.discset == -1:
-            logN0_next = np.log(N0_next+1)
-            logN1_next = np.log(N1_next+1)
-            logNe_next = np.log(Ne_next+1)
-            logNh_next = np.log(Nh_next+1)
-            logq_next = np.array([np.log(q_next+1)])
-            self.state = np.concatenate([logN0_next, logN1_next, logNh_next, logq_next, logNe_next])
-            self.obs = np.concatenate([logN0_next, logN1_next, logNh_next, logq_next, logNe_next])
-        else:
-            N0_next_idx = [self._discretize_idx(val, self.states['N0']) for val in N0_next]
-            N1_next_idx = [self._discretize_idx(val, self.states['N1']) for val in N1_next]
-            q_next_idx = [self._discretize_idx(q_next, self.states['q'])]
-            Ne_next_idx = [self._discretize_idx(Ne_next, self.states['Ne'])]
-            self.state = np.concatenate([N0_next_idx, N1_next_idx , q_next_idx, Ne_next_idx]).astype(int)
-            self.obs = np.concatenate([N0_next_idx, N1_next_idx, q_next_idx, Ne_next_idx]).astype(int)
+                # hatchery production for next year
+                Nh_next = np.array([np.round(a_prod * self.maxcap)]) # production target based on the springflow forecast
+                # flow stuff
+                q_next = q[0] # no change
+                qhat_next = q[0] # real flow is observed without error in the fall
+                # reward
+                reward = -Nh_next[0]/self.maxcap # economic cost (financial & labor cost)
+            done = False
+            # update state & obs
+            if self.discset == -1:
+                logN0_next = np.log(N0_next+1)
+                logN1_next = np.log(N1_next+1)
+                logNh_next = np.log(Nh_next+1)
+                logq_next = np.array([np.log(q_next+1)])
+                logqhat_next = np.array([np.log(qhat_next+1)])
+                self.state = np.concatenate([logN0_next, logN1_next, logNh_next, logq_next, t_next])
+                self.obs = np.concatenate([logN0_next, logN1_next, logNh_next, logqhat_next, t_next])
+        else: #extinct. terminate
+            reward = 0
+            extra_info['persistence_reward'] = 0
+            done = True
         return self.obs, reward, done, extra_info
+
+
 
     def state_discretization(self, discretization_set):
         """
@@ -506,19 +411,17 @@ class Hatchery3_2_5:
         output: dictionary with states, observations, and actions.
         """
 
-        if discretization_set == 0:
+        if discretization_set == 0: # deprecated
             states = {
                 "N0": list(np.linspace(self.N0minmax[0], self.N0minmax[1], 31)), # population size dim:(3)
                 "N1": list(np.linspace(self.N1minmax[0], self.N1minmax[1], 31)), # population size (3)
                 "q": list(np.linspace(self.qminmax[0], self.qminmax[1], 11)), # spring flow in Otowi (1) unit: m^3
-                "Ne": list(np.linspace(self.Neminmax[0], self.Neminmax[1], 11)), # Effective population size of the wild population BEFORE stocking (1)
             }
 
             observations = {
                 "ON0": states['N0'],
                 "ON1": states['N1'], 
                 "Oq": states['q'],
-                "ONe": states['Ne'],
             }
         elif discretization_set == -1: # continuous
             states = {
@@ -526,21 +429,21 @@ class Hatchery3_2_5:
                 "logN1": list(np.log(np.array(self.N1minmax)+1)), # log population size for age 1+ (3)
                 "logNh": list(np.log(np.array(self.Nhminmax)+1)), # log spring flow in Otowi (Otowi) (1)
                 "logq": list(np.log(np.array(self.qminmax)+1)), # log spring flow in Otowi (Otowi) (1)
-                "logNe": list(np.log(np.array(self.Neminmax)+1)), # Effective population size of the wild population BEFORE stocking (1)
+                "t": [0,1], # season 0=spring, 1=fall (1)
             }
             observations = {
                 "OlogN0": states['logN0'],
                 "OlogN1": states['logN1'],
                 "OlogNh": states['logNh'],
                 "Ologq": states['logq'],
-                "OlogNe": states['logNe'],
+                "Ot": states['t'],
             }
         # action space is 4 dimensional and each dimension is continuous between 0 and 1.
         actions = {
+            "a_p": [0,1], # proportion of maximum capacity to produce (1)
             "a_a": [0,1], # proportion of fish stocked in Angostura (1)
             "a_i": [0,1], # proportion of fish stocked in Isleta (1)
-            "a_s": [0,1], # proportion of fish stocked in San Acacia (1)
-            "a_d": [0,1], # proportion of fish discarded (1)
+            "a_s": [0,1]  # proportion of fish stocked in San Acacia (1)
         }
 
         return {'states': states,'observations': observations,'actions': actions}
@@ -633,7 +536,7 @@ class Hatchery3_2_5:
     def q2LC(self, q):
         """
         input:
-            q: springflow in angostura (1)
+            q: springflow in Otowi (1)
             method: 0=HMM, 1=GAM
         output:
             LC: larval carrying capacity (3)
@@ -667,10 +570,10 @@ class Hatchery3_2_5:
             saLC_error = np.clip(np.random.normal(0, self.LC_SA['std']), -1.96*self.LC_SA['std'], 1.96*self.LC_SA['std'])
             if self.discset == -1:
                 # get springflow at ABQ and SA for given springflow at Otowi
-                #abqsf = np.minimum(np.maximum(q - self.Otowi_minus_ABQ_springflow, self.flowmodel.allowedmin[1]), self.flowmodel.allowedmax[1])
-                #sasf = np.minimum(np.maximum(q - self.Otowi_minus_SA_springflow, self.flowmodel.allowedmin[2]), self.flowmodel.allowedmax[2])
-                abqsf = np.minimum(np.maximum(q, self.flowmodel.allowedmin[0]), self.flowmodel.allowedmax[0])
-                sasf = np.minimum(np.maximum(q - self.ABQ_minus_SA_springflow, self.flowmodel.allowedmin[1]), self.flowmodel.allowedmax[1])
+                abqsf = np.minimum(np.maximum(q - self.Otowi_minus_ABQ_springflow, self.flowmodel.allowedmin[1]), self.flowmodel.allowedmax[1])
+                sasf = np.minimum(np.maximum(q - self.Otowi_minus_SA_springflow, self.flowmodel.allowedmin[2]), self.flowmodel.allowedmax[2])
+                #abqsf = np.minimum(np.maximum(q, self.flowmodel.allowedmin[0]), self.flowmodel.allowedmax[0])
+                #sasf = np.minimum(np.maximum(q - self.ABQ_minus_SA_springflow, self.flowmodel.allowedmin[1]), self.flowmodel.allowedmax[1])
 
                 # predict the LC using the GAM model
                 try:
@@ -696,7 +599,7 @@ class Hatchery3_2_5:
         if forecast is not None:
             qhat = forecast
         else:
-            qhat = np.exp(np.array(self.obs)[self.oidx['logqhat']]) if self.discset == -1 else np.array([self.observations['qhat'][self.obs[self.oidx['qhat'][0]]]])
+            qhat = np.exp(np.array(self.obs)[self.oidx['Ologq']]) if self.discset == -1 else np.array([self.observations['qhat'][self.obs[self.oidx['qhat'][0]]]])
         qhat_kaf = qhat[0]/1233480.0 # convert cubic meter to kaf
         X = np.array([1,qhat_kaf])
         V = np.array([[1.662419546,-3.284657e-03],[-0.003284657,7.883848e-06]])
@@ -730,21 +633,28 @@ class Hatchery3_2_5:
         stock_prop = stock/np.sum(stock)
         return stock_prop
 
-    def stocking_decision2(self, N0, N1):
+    def stocking_decision3(self, N0, N1):
         """
         same as stocking_decision but it assumes that the manager observes the actual population size or at least gets the estimate of the population size from Charles' IPM model. 
-        The manager tries to stock enough to meet the 1.0 CPUE target in each reach. So get the corresponding average population size for 1 cpue for each reach and then stock if the 
-        current population size is below that.
+        The manager tries to stock enough to meet the 1.0 CPUE target in each reach. 
+        If there are any reaches below expected 1.0 CPUE equivalent popsize
+            only stock in those reaches to put them back to 1.0 CPUE equivalent popsize. Any leftover are distributed are stocked among reaches with inverse proportional weights.
+            inverse proportional weights: if each reach's population is 100,200,300, then the weights are inverse population / sum of inverse population = (1/100, 1/200, 1/300)/sum(1/100, 1/200, 1/300)
         """
-        stock = np.zeros(self.n_reach + 1)
+        stock = np.zeros(self.n_reach)
         Nr = N0 + N1 # popsize in each reach
-        # figure out which reach needs augmentation and how much
+        # figure out which reach needs augmentation because they're below 1.0CPUE and how much
         stock[0:self.n_reach] = np.maximum(self.popsize_1cpue[0:self.n_reach] - Nr,0)
-        stock_prop = stock/self.state[self.sidx['Nh'][0]] # divide by the current hatchery production size to get the proportion to stock in each reach.
-        if np.sum(stock_prop) >= 1:
-            stock_prop = stock_prop/np.sum(stock_prop)
-        else:
-            stock_prop[-1] = 1 - np.sum(stock_prop[0:self.n_reach])
+        Nh = np.round(np.exp(np.array(self.state)[self.sidx['logNh'][0]]) - 1)
+        if np.sum(stock) <= Nh:
+            if Nh == 0:
+                return (1/(Nr + 1))/np.sum(1/(Nr + 1)) # add 1 to avoid division by zero
+            else:
+                leftover = Nh - np.sum(stock)
+                inverseweight = (1/(Nr + 1))/np.sum(1/(Nr + 1)) # add 1 to avoid division by zero
+                leftoverstock = inverseweight*leftover
+                stock[0:self.n_reach] = stock[0:self.n_reach] + leftoverstock
+        stock_prop = stock/np.sum(stock)
         return stock_prop
 
     def monitoring_sample(self):
@@ -869,12 +779,14 @@ class Hatchery3_2_5:
                 stocked_cont = np.sum(p) # stocked contribution
                 total_cont = np.sum(N0) # wild contribution
                 x = stocked_cont/total_cont
+                #print(f"x: {np.round(x,2)}, New: {np.round(New,2):,.0f}, N0: {np.round(np.sum(N0)):,.0f}, p: {np.round(np.sum(p))}")
                 #effspawner = N0 + self.beta_2*N1 # effective number of spawners
                 #stocked_cont = np.sum((self.alpha*p)/(1 + self.alpha*effspawner/kappa)) # stocked fish contribution
                 #total_cont =  np.sum((self.alpha*(effspawner))/(1 + self.alpha*effspawner/kappa)) # wild fish contribution
                 #x = stocked_cont/(total_cont)
                 #mu_k = self.fc[1]*self.irphi*np.exp(-150*np.prod(np.exp(self.lMwmu))**(1/3))
                 #Neh = np.maximum(mu_k*(2*Nb - 1)/4, 0) # variance effective population size of hatchery population
+
                 Neh = Nb * self.Ne2Nratio
                 # apply Ryman-Laikre effect to calculate effective population size
                 if New == 0:
@@ -912,46 +824,4 @@ class Hatchery3_2_5:
         self.irphi = self.param_uncertainty_df['irphi'].iloc[self.paramsampleidx]
         self.dth = self.param_uncertainty_df['dth'].iloc[self.paramsampleidx]
         paramset = np.concatenate(([self.alpha], [self.beta], self.mu, [self.sd], [self.beta_2], [self.tau], [self.r0], [self.r1], self.lM0mu, self.lM1mu, self.lMwmu, [self.irphi], [self.dth]))
-
-        # reset genetic model parameters
-        lkappa_dataset = self.lkappa_allposterior[self.paramsampleidx]
-        self.lkappa_prob = lkappa_dataset['lkappaprob']
-        self.angolkappa_midvalues = lkappa_dataset['angolkappa_midvalues']
-        self.isllkappa_midvalues = lkappa_dataset['isllkappa_midvalues']
-        A,B             = np.meshgrid(self.angolkappa_midvalues,
-                                    self.isllkappa_midvalues,
-                                    indexing='ij')
-        mask            = self.lkappa_prob > 1e-3            # keep only useful combos
-        self.kappa_exp  = np.exp(np.stack([A[mask], B[mask], B[mask]], axis=-1))  # (nκ,3)
-        self.kappa_prob = self.lkappa_prob[mask]             # (nκ,)
-        # alpha_vec reset
-        alphainterval = np.linspace(self.alpha - 1.96*np.sqrt(self.alphavar), self.alpha + 1.96*np.sqrt(self.alphavar), 11)
-        self.alphaprob = norm.cdf(alphainterval[1:], loc=self.alpha, scale=np.sqrt(self.alphavar)) - norm.cdf(alphainterval[:-1], loc=self.alpha, scale=np.sqrt(self.alphavar))
-        self.alpha_centers = np.maximum((alphainterval[:-1] + alphainterval[1:]) / 2,0)
-        self.alpha_vec  = np.hstack((self.alpha, self.alpha_centers))  # (nα,)
-        # get sa and sj
-        bins = 5
-        intervals = np.linspace(0,1,bins+1) # bin boundaries
-        delfall_i = np.array([self.delfall[0,1],self.delfall[1,1]]) # isleta alpha beta
-        delfall_s = np.array([self.delfall[0,2],self.delfall[1,2]]) # san acacia alpha beta
-        delfallprob_i = beta.cdf(intervals[1:], a=delfall_i[0], b=delfall_i[1]) - beta.cdf(intervals[:-1], a=delfall_i[0], b=delfall_i[1])
-        delfallprob_s = beta.cdf(intervals[1:], a=delfall_s[0], b=delfall_s[1]) - beta.cdf(intervals[:-1], a=delfall_s[0], b=delfall_s[1])
-        delmid_values = (intervals[:-1] + intervals[1:]) / 2 # get the mid value for each bin
-        deldiffavg = np.zeros(self.n_reach)
-        deldiffavg[1:] = self.deldiff[0,1:] / np.sum(self.deldiff,axis=0)[1:] # average value for deldiff. angostura value is 0
-        M0 = np.exp(self.lM0mu)
-        M1 = np.exp(self.lM1mu)
-        Mw = np.exp(self.lMwmu)
-        combo = np.array(list(itertools.product(delmid_values, delmid_values)))
-        self.combo_delfallprob = np.array(list(itertools.product(delfallprob_i, delfallprob_s)))
-        self.combo_delfallprob = np.prod(self.combo_delfallprob, axis=1) # product of delfall probabilities
-        valididx = np.where(self.combo_delfallprob > 1e-2)[0] # only keep the combinations with probability greater than 1e-3
-        self.combo_delfallprob = self.combo_delfallprob[valididx] # only keep the valid combinations
-        delfall = np.column_stack((np.zeros(combo.shape[0]),combo))
-        delfall = delfall[valididx,:] # only keep the valid combinations
-        self.sj = np.exp(-124*M0 - 150*Mw)*((1 - delfall) + self.tau*delfall*deldiffavg + (1 - self.tau)*self.r0*np.mean(self.phidiff))
-        self.sa = np.exp(-124*M1 - 150*Mw)*((1 - delfall) + self.tau*delfall + (1 - self.tau)*self.r1*np.mean(self.phifall))
-        self.sj =  np.prod(self.sj,axis=1)**(1/self.sj.shape[1]) # geometric mean of sj
-        self.sa =  np.prod(self.sa,axis=1)**(1/self.sa.shape[1]) # geometric mean of sa
-
         return paramset

@@ -70,7 +70,7 @@ mod5.2 <- DirichReg(Y ~ log_popsize_a+ log_popsize_i+ log_popsize_s+ lowpop_a+ l
                     falldf_analysis,model='alternative')  
 
 mod6.2 <- DirichReg(Y ~ log_popsize_a+ log_popsize_i+ log_popsize_s+ lowpop_a+ lowpop_i+ lowpop_s+ 
-                      gini+ relshare_a + relshare_i|,
+                      gini+ relshare_a + relshare_i,
                     falldf_analysis,model='alternative')  
 
 mod7.2 <- DirichReg(Y ~ log_popsize_a+ log_popsize_i+ log_popsize_s+ lowpop_a+ lowpop_i+ lowpop_s+ 
@@ -84,6 +84,23 @@ mod8.2 <- DirichReg(Y ~ log_popsize_a+ log_popsize_i+ log_popsize_s+ extinct_a+ 
 mod9.2 <- DirichReg(Y ~ log_popsize_a+ log_popsize_i+ log_popsize_s+ relshare_a + relshare_i,
                     falldf_analysis,model='alternative')  
 
+# standardized version of mod9.2
+falldf_analysis_std <- falldf_analysis %>%
+  mutate(
+    log_popsize_a_std = scale(log_popsize_a),
+    log_popsize_i_std = scale(log_popsize_i),
+    log_popsize_s_std = scale(log_popsize_s),
+    relshare_a_std    = scale(relshare_a),
+    relshare_i_std    = scale(relshare_i)
+  )
+
+mod9.2_standardized <- DirichReg(
+  Y ~ log_popsize_a_std + log_popsize_i_std + log_popsize_s_std +
+    relshare_a_std + relshare_i_std,
+  data = falldf_analysis_std,
+  model = "alternative"
+)
+
 #summary(mod2)
 #summary(mod3)
 #summary(mod4)
@@ -92,6 +109,9 @@ summary(mod4.2)
 summary(mod5.2)
 summary(mod6.2)
 summary(mod7.2)
+summary(mod8.2)
+summary(mod9.2)
+summary(mod9.2_standardized)
 #AIC(mod2)
 #AIC(mod3)
 #AIC(mod4)
@@ -102,6 +122,7 @@ AIC(mod5.2)
 AIC(mod6.2)
 AIC(mod7.2)
 AIC(mod8.2)
+AIC(mod9.2)
 #pred_mod2 = predict(mod2)
 #pred_mod3 = predict(mod3)
 #pred_mod4 = predict(mod4)
@@ -113,8 +134,12 @@ pred_mod7.2 = predict(mod7.2)
 
 obs = falldf_analysis[,c('stock_a','stock_i','stock_s')]
 # plot obs vs pred
-plottingmod = mod8.2
+# congruence analysis (in SI2)
+plottingmod = mod9.2
 plottingmod_pred = predict(plottingmod)
+congruence = pmin(plottingmod_pred,as.matrix(obs))
+mean(apply(congruence,1,sum))
+
 if(1==1)
 {par(mfrow=c(1,3))
   plot(plottingmod_pred[,1],obs$stock_a,main=sprintf('Angostura corr: %.2f',cor(plottingmod_pred[,1],obs$stock_a)),xlim=c(0,1),ylim=c(0,1))
@@ -125,10 +150,9 @@ if(1==1)
   abline(a=0, b=1, col="red", lwd=2)
 }
 
-# MODEL OF CHOICE : 3.2. Has the lowest AIC next to 4.2 marginally and while 
-# having 3 less predictors (the relative share predictors)
-mod = mod3.2
-pred = pred_mod3.2
+# MODEL OF CHOICE : 9.2
+mod = mod9.2
+pred = pred_mod9.2
 
 # 2. Drop-one analysis to find 2 covariates that explain the variation in response the most.
 if(1==0)

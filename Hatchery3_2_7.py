@@ -10,7 +10,7 @@ import os
 from AR1_normalized import AR1_normalized
 from whitenoise_normalized import whitenoise_normalized
 
-class Hatchery3_2_5:
+class Hatchery3_2_7:
     """
     Same as hatchery 3.2, but all the fall actions are taken at once, and spring decision is not taken. It's assumed that maximum capacity is produced every year.
     action is a vector of 4, where the first three are stocking proportions in angostura, isleta, and san acacia, and the last one is the discard proportion.
@@ -19,9 +19,9 @@ class Hatchery3_2_5:
     """
     def __init__(self,initstate,parameterization_set,discretization_set,LC_prediction_method, param_uncertainty=0, Rinfo=None):
         """
-        same as 3.2.4, but adds spring production process, production is no longer fixed to max capacity. production follows the current strategy based on springflow forecast.
+        same as 3.2.5, but no discarding option
         """
-        self.envID = 'Hatchery3.2.5'
+        self.envID = 'Hatchery3.2.7'
         self.partial = True
         self.episodic = True
         self.absorbing_cut = True # has an absorbing state and the episode should be cut shortly after reaching it.
@@ -228,7 +228,7 @@ class Hatchery3_2_5:
         
         self.statevar_dim = (self.N0_dim, self.N1_dim, self.Nh_dim, self.q_dim, self.Ne_dim)
         self.obsvar_dim = (self.N0_dim, self.N1_dim, self.Nh_dim, self.q_dim, self.Ne_dim)
-        self.action_dim = (1,1,1,1) # 4 actions: stocking proportion in angostura, isleta, and san acacia, and discard rest.
+        self.action_dim = (1,1,1) # 3 actions: stocking proportion in angostura, isleta, and san acacia.
 
         # starting 3.0, discretization for discrete variables and ranges for continuous variables will be defined in a separate function, state_discretization.
         discretization_obj = self.state_discretization(discretization_set)
@@ -540,7 +540,6 @@ class Hatchery3_2_5:
             "a_a": [0,1], # proportion of fish stocked in Angostura (1)
             "a_i": [0,1], # proportion of fish stocked in Isleta (1)
             "a_s": [0,1], # proportion of fish stocked in San Acacia (1)
-            "a_d": [0,1], # proportion of fish discarded (1)
         }
 
         return {'states': states,'observations': observations,'actions': actions}
