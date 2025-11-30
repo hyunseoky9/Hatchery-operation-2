@@ -400,6 +400,10 @@ class Hatchery3_3_6:
                     #extra_info['adultM'] = adultmortality
                     #extra_info['P'] = P
 
+                # monitoring data simulation.
+                self.mdata = self.monitor(age0_drysurvival, age1_drysurvival, N0, N1)
+                self.mfalldata = self.fallmonitor(N0_next,N1_next)
+                self.rescuedata = self.rescue()
                 # hatchery production for next year
                 Nh_next = np.array([np.round(a_prod * self.maxcap)]) # production target based on the springflow forecast
                 # flow stuff
