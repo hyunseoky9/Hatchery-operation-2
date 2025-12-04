@@ -1,8 +1,9 @@
 import itertools
 from scipy.stats import multivariate_hypergeom, norm, beta
+from scipy.special import logit, expit
 import pickle
 import numpy as np
-from math import floor
+from math import exp, floor
 import random
 import pandas as pd
 import sys
@@ -10,13 +11,12 @@ import os
 from AR1_normalized import AR1_normalized
 from whitenoise_normalized_otowi import whitenoise_normalized_otowi
 
-class Hatchery3_3_6:
+class Hatchery3_3_7:
     def __init__(self,initstate,parameterization_set,discretization_set,LC_prediction_method, param_uncertainty=0, Rinfo=None):
         """
-        same  as 3.3.5, but fixed the summer mortality rate sampling.
-        Start of the 2nd project with monitoring process
+        latent process same  as 3.3.6, includes observation process with catch data now.
         """
-        self.envID = 'Hatchery3.3.6'
+        self.envID = 'Hatchery3.3.7'
         self.partial = True
         self.episodic = True
         self.absorbing_cut = True # has an absorbing state and the episode should be cut shortly after reaching it.
@@ -25,10 +25,18 @@ class Hatchery3_3_6:
         self.contstate = False
         self.special_stacking = False
 
+
+
         # Define parameters
         # call in parameterization dataset csv
         # Read csv 'parameterization_env1.0.csv'
         # for reach index, 1 = angostura, 2 = isleta, 3 = san acacia
+        # parameter posterior distribution 
+        if self.param_uncertainty:
+            param_uncertainty_filename = 'uncertain_parameters_posterior_samples4POMDP.csv'
+            self.param_uncertainty_df = pd.read_csv(param_uncertainty_filename)
+            self.paramsampleidx = None # initiate sample idx.
+
         self.parset = parameterization_set - 1
         parameterization_set_filename = 'parameterization_hatchery3.1.csv'
         paramdf = pd.read_csv(parameterization_set_filename)
@@ -62,6 +70,16 @@ class Hatchery3_3_6:
         self.p0 = paramdf['p0'][self.parset]
         self.p1 = paramdf['p1'][self.parset]
         self.sz = paramdf['sz'][self.parset]
+        self.rsz = np.mean(self.param_uncertainty_df['rsz'])
+        self.bankfull = np.mean(self.param_uncertainty_df[['bankfull_a','bankfull_i','bankfull_s']], axis=0)
+        self.lA0_perpool = np.mean(self.param_uncertainty_df['lA0_perpool'])
+        self.AtQ_perpool = np.mean(self.param_uncertainty_df['AtQ_perpool'])
+        self.alpha0_int = np.mean(self.param_uncertainty_df['alpha0_int'])
+        self.alpha1_int = np.mean(self.param_uncertainty_df['alpha1_int'])
+        self.alpha0_max = np.mean(self.param_uncertainty_df['alpha0_max'])
+        self.alpha1_max = np.mean(self.param_uncertainty_df['alpha1_max'])
+        self.lsl_width = np.mean(self.param_uncertainty_df[['lsl_width_a','lsl_width_i','lsl_width_s']], axis=0)
+
         self.fpool_f = np.array([paramdf['fpoolf_a'][self.parset],paramdf['fpoolf_i'][self.parset],paramdf['fpoolf_s'][self.parset]])
         self.fpool_s = np.array([paramdf['fpools_a'][self.parset],paramdf['fpools_i'][self.parset],paramdf['fpools_s'][self.parset]])
         self.frun_f = np.array([paramdf['frunf_a'][self.parset],paramdf['frunf_i'][self.parset],paramdf['frunf_s'][self.parset]])
@@ -104,11 +122,6 @@ class Hatchery3_3_6:
         # discount factor
         self.gamma = 0.99
 
-        # parameter posterior distribution 
-        if self.param_uncertainty:
-            param_uncertainty_filename = 'uncertain_parameters_posterior_samples4POMDP.csv'
-            self.param_uncertainty_df = pd.read_csv(param_uncertainty_filename)
-            self.paramsampleidx = None # initiate sample idx.
 
         # start springflow simulation model and springflow-to-"Larval carrying capacity" model.
         #self.flowmodel = AR1_normalized()
@@ -137,12 +150,14 @@ class Hatchery3_3_6:
                 self.LC_SA = pickle.load(handle)
 
 
+        # monitoring related data. made from monitoring_simumlation_pre-analysis.ipynb
+        with open('monitoring_sim_essentials.pkl', 'rb') as f:
+            self.monitoring_sim_essentials = pickle.load(f)
+
         # observation related parameters
         self.avgp = np.mean([self.p0, self.p1]) # average p
         self.avgfallf = (self.fpool_f + self.frun_f)/2 # f is the proportion of RGSM in the river segment exposed to sampling
         self.popsize_1cpue = 1/(self.avgfallf*self.avgp*self.thetaf*(100/(self.avgeff_fp+self.avgeff_fr))) # average population size that corresponds to 1 cpue given average p, f (fall), and theta (fall) parameter values.
-
-        # 
 
         # range for each variables
         self.N0minmax = [0,1e7] 
@@ -285,10 +300,249 @@ class Hatchery3_3_6:
             paramvals = self.parameter_reset(paramsampleidx) # resample parameters from the posterior distribution
 
         self.state = np.concatenate(new_state)
+
+        # monitoring data simulation
+        delfall = np.concatenate(([self.delfall[0][0]],np.random.beta(self.delfall[0][1:],self.delfall[1][1:])))
+        deldiff = np.concatenate(([self.deldiff[0][0]],np.random.beta(self.deldiff[0][1:],self.deldiff[1][1:])))
+        age0_drysurvival = ((1 - delfall) + self.tau*delfall*deldiff + (1 - self.tau)*self.r0*self.phidiff)
+        age1_drysurvival = ((1-delfall) + self.tau*delfall + (1 - self.tau)*self.r1*self.phifall)
+        M0 = np.exp(np.random.normal(self.lM0mu, self.lM0sd))
+        M1 = np.exp(np.random.normal(self.lM1mu, self.lM1sd))
+        self.monitor(M0, M1, age0_drysurvival, age1_drysurvival, delfall, deldiff, np.exp(N0val), np.exp(N1val),initializing=True)
+
         self.obs = np.concatenate(new_obs)
 
         return self.obs, self.state
     
+
+
+    def monitor(self, M0, M1, age0_drysurvival, age1_drysurvival, delfall, deldiff, N0, N1, initializing=False):
+        """
+        Simulate monitoring data based on the current state.
+        """
+        if not initializing:
+            if self.state[self.sidx['t']][0] == 1: # fall, set up the new monitoring dataframe and fill in spring
+                # set up
+                self.mdata = self.monitoringdata_setup(datatype=1)
+                #self.rescue = self.monitoringdata_setup(datatype=2)
+                # fill in april monitoring data if there's monitoring session.
+                self.sample_catch(M0, M1, age0_drysurvival, age1_drysurvival, delfall, deldiff, N0, N1, initializing, springmonitoring=True)
+            else: # spring, fill in monitoring data
+                self.sample_catch(M0, M1, age0_drysurvival, age1_drysurvival, delfall, deldiff, N0, N1, initializing, springmonitoring=False) 
+        else: # initialization, N0 and N1 is fall population, not spring population when initializing. 
+            # set up
+            self.mdata = self.monitoringdata_setup(datatype=1)
+            #self.rescue = self.monitoringdata_setup(datatype=2)
+            # fill in catch data
+            self.sample_catch(M0, M1, age0_drysurvival, age1_drysurvival, delfall, deldiff, N0, N1, initializing, springmonitoring=True)
+            self.sample_catch(M0, M1, age0_drysurvival, age1_drysurvival, delfall, deldiff, N0, N1, initializing, springmonitoring=False)
+
+    def sample_catch(self, M0, M1, age0_drysurvival, age1_drysurvival, delfall, deldiff, N0, N1, initializing, springmonitoring):
+        '''
+        sample catch data for monitoring and rescue data.
+        if springmonitoring = True, sample for april monitoring data only, else sample for may through november monitoring data only + rescue data.
+        '''
+        # monitoring data
+        if springmonitoring:
+            idx = self.mdata['month'].values == 4 # april_idx
+        else:
+            idx = self.mdata['month'].values !=4 # non_april_idx
+        if(np.sum(idx)>0):
+            ## get detectability parameters 
+            ### theta
+            reachlenyridx = np.random.choice(np.arange(0,self.monitoring_sim_essentials['reach_wetlen'].shape[2]), 1)[0]
+            theta = 0.2/(self.monitoring_sim_essentials['reach_wetlen'][self.mdata['reach'].values[idx]-1,self.mdata['julian'].values[idx]-1,reachlenyridx])
+            ### f
+            xi_p0 = self.alpha0_int*self.mdata['discharge'].values[idx]/(1 + self.alpha0_int*self.mdata['discharge'].values[idx]/self.alpha0_max)
+            xi_p1 = self.alpha1_int*self.mdata['discharge'].values[idx]/(1 + self.alpha1_int*self.mdata['discharge'].values[idx]/self.alpha1_max)
+            xi_m0 = xi_p0 * ((self.mdata['habitat'].values[idx] - 1)* (1/xi_p0 - 1) + 1) # this makes pool samples have xi_m0 = 1 and run samples have xi_m0 = xi_p0
+            xi_m1 = xi_p1 * ((self.mdata['habitat'].values[idx] - 1)* (1/xi_p1 - 1) + 1)
+            A0_perpool = logit(self.lA0_perpool) # logit to log
+            sl_width = np.exp(self.lsl_width[self.mdata['reach'].values[idx]-1])
+            areavar1 = np.exp(A0_perpool + self.AtQ_perpool*self.mdata['discharge'].values[idx])
+            areavar2 = 200*sl_width*self.mdata['discharge'].values[idx]/(1+sl_width*self.mdata['discharge'].values[idx]/self.bankfull[self.mdata['reach'].values[idx]-1])
+            totpool = areavar1*areavar2
+            totrun = (1-areavar1)*areavar2
+            f0 = np.minimum(self.mdata['effort'].values[idx]*xi_m0/(xi_p0*totpool + totrun),1)
+            f1 = np.minimum(self.mdata['effort'].values[idx]*xi_m1/(xi_p1*totpool + totrun),1)
+            ## get population size on the sampling day
+            if initializing: # when initializing, N0 and N1 are fall population sizes, need to backtrack to spring population sizes
+                N0 = N0/(np.exp(-M0 * 124) * age0_drysurvival) # age 0 population in spring
+                N1 = N1/(np.exp(-M1 * 215) * age1_drysurvival) # age 1 population in spring
+            natural_m0 = np.exp(-M0[self.mdata['reach'].values[idx]-1] * (self.mdata['julian'].values[idx] - 91)) # age 0 natural mortality adjustment from fall to sampling day
+            natural_m1 = np.exp(-M1[self.mdata['reach'].values[idx]-1] * self.mdata['julian'].values[idx]) # age 0 natural mortality adjustment from fall to sampling day
+            N0_adjusted = N0[self.mdata['reach'].values[idx]-1] * natural_m0 * age0_drysurvival[self.mdata['reach'].values[idx]-1]
+            N1_adjusted = N1[self.mdata['reach'].values[idx]-1] * natural_m1 * age1_drysurvival[self.mdata['reach'].values[idx]-1]
+            ## get expected cathch
+            eC0 = N0_adjusted * theta *  self.p0 * f0
+            eC1 = N1_adjusted * theta *  self.p1 * f1
+            C0 = np.random.negative_binomial(self.sz, self.sz/(self.sz + eC0))
+            C1 = np.random.negative_binomial(self.sz, self.sz/(self.sz + eC1))
+            self.mdata.loc[idx, 'catch0'] = C0
+            self.mdata.loc[idx, 'catch1'] = C1
+            self.mdata.loc[idx, 'catch01'] = C0 + C1
+            print('C0:', C0)
+            print('C1:', C1)
+            
+            if springmonitoring == False:
+                self.mdata.loc[self.mdata['month'].isin([4,5,6,10,11]), 'catch0'] = 0 # oct, nov catch is not distinguishable by age. Also, there's no age 0 in april, may, and june. 
+                self.mdata.loc[self.mdata['month'].isin([10,11]), 'catch1'] = 0  
+        # rescue catch data
+        # WARNING: issues with rescue data simualtion. 
+        # rescuetheta will be 0 for most samples, because most days in the data have no drying. This makes the simulated sample rescue catch always 0.
+        # This zero-inflated data looks very different from actual rescue data. 
+        # Another issue is that when abundance is really large and rescuetheta is not zero, the eR0 values can be really large,
+        # leading to negative binomial sampling errors due to numerical instability in the function.
+        # not doing rescue data for now (12/3/2025)
+        if 1==0:
+            if springmonitoring:
+                idx = self.rescue['month'].values == 4 # april_idx
+            else:
+                idx = self.rescue['month'].values !=4 # non_april_idx
+            if np.sum(idx)>0:
+                ## rescue theta is just the proportion of river dried that day. 
+                ### find a year where sum of delfall absolute difference accross 3 reaches is samllest
+                mindiffyridx = np.argmin(np.sum(np.abs(delfall[:,None] - self.monitoring_sim_essentials['total_dryingprop']),axis=0))
+                ### use the normalize drying proportion of the chosen year to the simulated delfall.
+                obstotal_drying_denom = self.monitoring_sim_essentials['total_dryingprop'][self.rescue['reach'].values[idx]-1,mindiffyridx]
+                obstotal_drying_denom[obstotal_drying_denom==0] = 1 # to avoid zero division
+                rescuetheta = (self.monitoring_sim_essentials['poportion_dried'][self.rescue['reach'].values[idx]-1,self.rescue['julian'].values[idx]-1, mindiffyridx]*
+                    (delfall[self.rescue['reach'].values[idx]-1]/obstotal_drying_denom))
+                ## calculate abundance on the rescue days.
+                if initializing:
+                    N0 = N0/(np.exp(-M0 * 124) * age0_drysurvival) # age 0 population in spring
+                    N1 = N1/(np.exp(-M1 * 215) * age1_drysurvival) # age 1 population in spring
+                natural_m0 = np.exp(-M0[self.rescue['reach'].values[idx]-1] * (self.rescue['julian'].values[idx] - 91)) # age 0 natural mortality adjustment from fall to sampling day
+                natural_m1 = np.exp(-M1[self.rescue['reach'].values[idx]-1] * self.rescue['julian'].values[idx]) # age 0 natural mortality adjustment from fall to sampling day
+                N0_adjusted = N0[self.rescue['reach'].values[idx]-1] * natural_m0 * age0_drysurvival[self.rescue['reach'].values[idx]-1]
+                N1_adjusted = N1[self.rescue['reach'].values[idx]-1] * natural_m1 * age1_drysurvival[self.rescue['reach'].values[idx]-1]
+                ## calculate expected rescue catch
+                eR0 = self.r0 * rescuetheta * N0_adjusted * (1-self.tau)
+                eR1 = self.r1 * rescuetheta * N1_adjusted * (1-self.tau)
+                ## sample rescue catch
+                R0 = np.random.negative_binomial(self.rsz, self.rsz/(self.rsz + eR0))
+                R1 = np.random.negative_binomial(self.rsz, self.rsz/(self.rsz + eR1))
+                print(R0+R1)
+                self.rescue.loc[idx, 'catch0'] = R0
+                self.rescue.loc[idx, 'catch1'] = R1
+                self.rescue.loc[idx, 'catch01'] = R0 + R1
+    
+    def monitoringdata_setup(self, datatype):
+        """
+        Set up the monitoring data dataframe structure.
+        datatype: 1 = regular monitoring data, 2 = rescue data
+        """
+        if datatype == 1:
+            # set up monitoring data dataframe
+            columns = ['month','juliain','reach','catch0','catch1','discharge','habitat','effort']
+            # choose months of monitoring.
+            numsesh = np.random.choice(self.monitoring_sim_essentials['num_sesh_dist'],1)
+            seshmonth = np.sort(np.random.choice(np.array([4,5,6,7,8,9,10]),numsesh, replace=False))
+            # number of sample pairs for each sesh (one for run and one for pool)
+            halfnumsamples = np.random.choice(self.monitoring_sim_essentials['halfnum_sample_dist'], numsesh)
+            # julians for each samples
+            
+            julians = []
+            sample_reaches = []
+            discharge = []
+            # for each session, generate julians and sample reaches
+            for i in range(len(halfnumsamples)):
+                sumsampledaymorethan30 = 1
+                while sumsampledaymorethan30:
+                    sampledaydiff = np.random.choice(self.monitoring_sim_essentials['days_since_last_sample_dist'], halfnumsamples[i]-1)
+                    if np.sum(sampledaydiff) < 30:
+                        sumsampledaymorethan30 = 0
+                startdate = self.monitoring_sim_essentials['start_of_month_julian'][seshmonth[i]-4]
+                julian = np.concatenate((np.array([startdate]), startdate + np.cumsum(sampledaydiff)))
+                julians.append(julian)      
+                sample_reach = np.random.multinomial(halfnumsamples[i], self.monitoring_sim_essentials['sampledist_reach'])
+                sample_reach = np.concatenate(([1]*sample_reach[0], [2]*sample_reach[1], [3]*sample_reach[2]))
+                sample_reaches.append(sample_reach)
+                unique_julians, inverse_indices = np.unique(julian, return_inverse=True)
+                discharge_unique = np.random.choice(self.monitoring_sim_essentials['discharge_data'][seshmonth[i]-4], len(unique_julians))
+                discharge_sample = discharge_unique[inverse_indices]
+                discharge.append(discharge_sample)
+            # add november session. 
+            halfnumsamples_nov = np.random.choice(self.monitoring_sim_essentials['halfnum_sample_dist_nov'], 1)
+            julians.append(np.ones(halfnumsamples_nov)*215) # all november samples on day 215 (Nov 1)
+            sample_reach_nov = np.random.multinomial(halfnumsamples_nov[0], self.monitoring_sim_essentials['sampledist_reach_nov'])
+            sample_reach_nov = np.concatenate(([1]*sample_reach_nov[0], [2]*sample_reach_nov[1], [3]*sample_reach_nov[2]))
+            sample_reaches.append(sample_reach_nov)
+            discharge_sample = np.random.choice(self.monitoring_sim_essentials['discharge_data_nov'], halfnumsamples_nov[0])
+            discharge.append(discharge_sample)
+
+            # flow
+            discharge = np.concatenate(discharge)
+            discharge = np.repeat(discharge,2) # for run and pool
+            # repeat other variables for each habitat. 
+            repeated_months = np.concatenate((np.repeat(seshmonth, halfnumsamples*2), np.ones(halfnumsamples_nov[0]*2)*11)).astype(int)
+            julians_flat = np.concatenate(julians)
+            julians_flat = np.repeat(julians_flat,2)
+            reaches_flat = np.repeat(np.concatenate(sample_reaches),2).astype(int)
+            habitat = np.tile(np.array([1,2]), np.sum(halfnumsamples)+halfnumsamples_nov[0]) # 1 = pool, 2 = run
+            effort = np.zeros(np.sum(halfnumsamples)*2 + halfnumsamples_nov[0]*2)
+            # 0 and even numbers get pool effort, odd numbers get run effort
+            effort[1:len(effort):2] = np.random.choice(self.monitoring_sim_essentials['effort_run_dist'], len(effort)//2)
+            effort[0:len(effort):2] = np.random.choice(self.monitoring_sim_essentials['effort_pool_dist'], len(effort)//2)
+
+            # create dataframe
+            self.mdata = pd.DataFrame({'month':repeated_months,
+                                'julian':julians_flat.astype(int),
+                                'reach':reaches_flat,
+                                'catch0':np.zeros((np.sum(halfnumsamples) + halfnumsamples_nov[0])*2),
+                                'catch1':np.zeros((np.sum(halfnumsamples) + halfnumsamples_nov[0])*2),
+                                'catch01':np.zeros((np.sum(halfnumsamples) + halfnumsamples_nov[0])*2),
+                                'discharge':discharge,
+                                'habitat':habitat,
+                                'effort':effort
+                                })
+
+            #with pd.option_context('display.max_rows', None):
+            #    print(self.mdata)
+            return self.mdata
+        else: #datatype == 2
+            random_indices = np.random.randint(0, len(self.monitoring_sim_essentials['samplesize_permonth_rescue']), size=self.monitoring_sim_essentials['samplesize_permonth_rescue'].shape[1])
+            sampled_values = self.monitoring_sim_essentials['samplesize_permonth_rescue'].values[random_indices, np.arange(self.monitoring_sim_essentials['samplesize_permonth_rescue'].shape[1])]
+            if(np.all(sampled_values == 0)): # if all sampled values are zero, sample a positive value from July
+                julypositive_values = self.monitoring_sim_essentials['samplesize_permonth_rescue'].iloc[:,3] 
+                julypositive_values = julypositive_values[julypositive_values > 0]
+                sampled_values[3] = np.random.choice(julypositive_values,1)[0]
+            months = []
+            reaches = []
+            julians = []
+            sample_sizes_nozeros = []
+            for i in range(len(sampled_values)):
+                if sampled_values[i] > 0:
+                    sample_sizes_nozeros.append(sampled_values[i])
+                    reach = []
+                    month = i+4
+                    months.append(month) # rescue months from april (4) to october (10)
+                    startdate = np.random.choice(np.arange(0,30-sampled_values[i]+1),1) + self.monitoring_sim_essentials['start_of_month_julian'][i]
+                    julian = np.arange(startdate, startdate + sampled_values[i])
+                    julians.append(julian)
+                    firstsamplereach = np.random.binomial(1, self.monitoring_sim_essentials['reach_proportions_rescue'][1]) + 2
+                    for j in range(sampled_values[i]):
+                        if j == 0:
+                            reach.append(firstsamplereach)
+                        else:
+                            if reach[-1] == 2:
+                                reach.append(np.random.binomial(1, self.monitoring_sim_essentials['reach_transition_matrix_rescue'][0][1]) + 2)
+                            else:
+                                reach.append(np.random.binomial(1, self.monitoring_sim_essentials['reach_transition_matrix_rescue'][1][1]) + 2)
+                    reaches.append(reach)
+            months = np.repeat(np.array(months), sample_sizes_nozeros)
+            reaches = np.concatenate(reaches)
+            julians = np.concatenate(julians)
+            self.rescue = pd.DataFrame({'month':months,
+                                'julian':julians,
+                                'catch0':np.zeros(len(reaches)),
+                                'catch1':np.zeros(len(reaches)),
+                                'reach':reaches,
+                                })
+            #with pd.option_context('display.max_rows', None):
+            #    print(self.rescue)
+
+            return self.rescue
 
     def step(self, a, current_strategy = 0):
         """
@@ -350,6 +604,16 @@ class Hatchery3_3_6:
                 N0_next = N0
                 N1_next = N1
                 Nh_next = np.array([0])
+                # monitoring dataframe set up & April monitoring
+                delfall = np.concatenate(([self.delfall[0][0]],np.random.beta(self.delfall[0][1:],self.delfall[1][1:])))
+                deldiff = np.concatenate(([self.deldiff[0][0]],np.random.beta(self.deldiff[0][1:],self.deldiff[1][1:])))
+                age0_drysurvival = ((1 - delfall) + self.tau*delfall*deldiff + (1 - self.tau)*self.r0*self.phidiff)
+                age1_drysurvival = ((1-delfall) + self.tau*delfall + (1 - self.tau)*self.r1*self.phifall)
+                M0 = np.exp(np.random.normal(self.lM0mu, self.lM0sd))
+                M1 = np.exp(np.random.normal(self.lM1mu, self.lM1sd))
+                self.monitor(M0, M1, age0_drysurvival, age1_drysurvival, delfall, deldiff, np.exp(np.zeros(self.n_reach)), np.exp(N1_next),initializing=False)
+                
+
             else: # spring
                 # demographic stuff (reproductin and summer survival)
                 delfall = np.concatenate(([self.delfall[0][0]],np.random.beta(self.delfall[0][1:],self.delfall[1][1:])))
@@ -383,6 +647,9 @@ class Hatchery3_3_6:
                     #extra_info['adultM'] = adultmortality
                     #extra_info['P'] = P
 
+                # monitoring data simulation.
+                self.mdata = self.monitor(M0, M1, age0_drysurvival, age1_drysurvival, P, N0+N1)
+                self.rescuedata = self.rescue()
                 # hatchery production for next year
                 Nh_next = np.array([np.round(a_prod * self.maxcap)]) # production target based on the springflow forecast
                 # flow stuff
@@ -828,6 +1095,30 @@ class Hatchery3_3_6:
         self.lM0sd = np.array([sdsample, sdsample, sdsample])
         self.lM1sd = np.array([sdsample, sdsample, sdsample])
         self.irphi = self.param_uncertainty_df['irphi'].iloc[self.paramsampleidx]
-        self.dth = self.param_uncertainty_df['dth'].iloc[self.paramsampleidx]
-        paramset = np.concatenate(([self.alpha], [self.beta], self.mu, [self.sd], [self.beta_2], [self.tau], [self.r0], [self.r1], self.lM0mu, self.lM1mu, self.lMwmu, [self.irphi], [self.dth]))
+        self.dth = self.param_uncertainty_df['dth'].iloc[self.paramsampleidx] # extinction threshold
+        ## rest sampling parameters
+        self.bankfull = np.array([self.param_uncertainty_df['bankfull_a'].iloc[self.paramsampleidx],
+                                self.param_uncertainty_df['bankfull_i'].iloc[self.paramsampleidx],
+                                self.param_uncertainty_df['bankfull_s'].iloc[self.paramsampleidx]])
+        self.lA0_perpool = self.param_uncertainty_df['lA0_perpool'].iloc[self.paramsampleidx]
+        self.AtQ_perpool = self.param_uncertainty_df['AtQ_perpool'].iloc[self.paramsampleidx]
+        self.alpha0_int = self.param_uncertainty_df['alpha0_int'].iloc[self.paramsampleidx]
+        self.alpha1_int = self.param_uncertainty_df['alpha1_int'].iloc[self.paramsampleidx]
+        self.alpha0_max = self.param_uncertainty_df['alpha0_max'].iloc[self.paramsampleidx]
+        self.alpha1_max = self.param_uncertainty_df['alpha1_max'].iloc[self.paramsampleidx]
+        self.sz = self.param_uncertainty_df['sz'].iloc[self.paramsampleidx]
+        self.rsz = self.param_uncertainty_df['rsz'].iloc[self.paramsampleidx]
+        self.p0 = self.param_uncertainty_df['p0'].iloc[self.paramsampleidx]
+        self.p1 = self.param_uncertainty_df['p1'].iloc[self.paramsampleidx]
+        self.lsl_width = np.array([self.param_uncertainty_df['lsl_width_a'].iloc[self.paramsampleidx],
+                                    self.param_uncertainty_df['lsl_width_i'].iloc[self.paramsampleidx],
+                                    self.param_uncertainty_df['lsl_width_s'].iloc[self.paramsampleidx]])
+        
+        
+
+        paramset = np.concatenate(([self.alpha], [self.beta], self.mu, [self.sd], [self.beta_2],
+                                    [self.tau], [self.r0], [self.r1], self.lM0mu, self.lM1mu,
+                                      self.lMwmu, [self.irphi], [self.dth], self.bankfull,
+                                      [self.lA0_perpool], [self.AtQ_perpool], [self.alpha0_int],
+                                      [self.alpha1_int], [self.alpha0_max], [self.alpha1_max], [self.sz], [self.p0], [self.p1], self.lsl_width))
         return paramset

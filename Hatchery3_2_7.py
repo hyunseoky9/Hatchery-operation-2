@@ -339,16 +339,6 @@ class Hatchery3_2_7:
             new_state.append(np.array([initstate[3]]))
             new_obs.append(np.array([initstate[3]]))
 
-        # Ne & ONe
-        if self.discset == -1:
-            Neval = np.array([np.sum(np.exp(N0val)-1 + np.exp(N1val)-1)*0.6])
-            #Neval,_,_ = self.NeCalc(np.exp(N0val)-1, np.exp(N1val)-1, pval[0], Nbval[0])
-        else:
-            Neval = np.array([np.sum(np.exp(N0val)-1 + np.exp(N1val)-1)*0.6])
-            #Neval,_,_ = self.NeCalc(np.exp(N0val)-1, np.exp(N1val)-1, pval, Nbval)
-            Neval = self._discretize_idx(Neval, self.states['Ne'])
-        new_state.append(np.log(Neval+1))
-        new_obs.append(np.log(Neval+1))
 
         # sample
         if self.param_uncertainty:
