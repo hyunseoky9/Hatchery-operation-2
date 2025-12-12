@@ -11,12 +11,13 @@ import os
 from AR1_normalized import AR1_normalized
 from whitenoise_normalized_otowi import whitenoise_normalized_otowi
 
-class Hatchery3_3_7:
+class Hatchery3_3_7_2:
     def __init__(self,initstate,parameterization_set,discretization_set,LC_prediction_method, param_uncertainty=0, Rinfo=None):
         """
-        latent process same  as 3.3.6, includes observation process with catch data now.
+        latent process same  as 3.3.7, but monitoring process is a bit more simplified for easier learning for the RL
+        .
         """
-        self.envID = 'Hatchery3.3.7'
+        self.envID = 'Hatchery3.3.7_2'
         self.partial = True
         self.episodic = True
         self.absorbing_cut = True # has an absorbing state and the episode should be cut shortly after reaching it.
@@ -159,7 +160,7 @@ class Hatchery3_3_7:
         self.avgfallf = (self.fpool_f + self.frun_f)/2 # f is the proportion of RGSM in the river segment exposed to sampling
         self.popsize_1cpue = 1/(self.avgfallf*self.avgp*self.thetaf*(100/(self.avgeff_fp+self.avgeff_fr))) # average population size that corresponds to 1 cpue given average p, f (fall), and theta (fall) parameter values.
         self.monthidx_dict = {'apr':0,'may':1,'jun':2,'jul':3,'aug':4,'sep':5,'oct':6,'nov':7}
-        self.springmonitoring_months = [4,11] # [4]
+        
         
         # range for each variables
         self.N0minmax = [0,1e7] 
@@ -323,7 +324,7 @@ class Hatchery3_3_7:
     
 
 
-    def monitor(self, M0, M1, Mw, age0_drysurvival, age1_drysurvival, delfall, deldiff, N0, N1, initializing=False):
+    def monitor(self, M0, M1, age0_drysurvival, age1_drysurvival, delfall, deldiff, N0, N1, initializing=False):
         """
         Simulate monitoring data based on the current state.
         """
@@ -341,20 +342,19 @@ class Hatchery3_3_7:
             self.mdata = self.monitoringdata_setup(datatype=1)
             #self.rescue = self.monitoringdata_setup(datatype=2)
             # fill in catch data
-            self.sample_catch(M0, M1, Mw, age0_drysurvival, age1_drysurvival, delfall, deldiff, N0, N1, initializing, springmonitoring=True)
-            self.sample_catch(M0, M1, Mw, age0_drysurvival, age1_drysurvival, delfall, deldiff, N0, N1, initializing, springmonitoring=False)
+            self.sample_catch(M0, M1, age0_drysurvival, age1_drysurvival, delfall, deldiff, N0, N1, initializing, springmonitoring=True)
+            self.sample_catch(M0, M1, age0_drysurvival, age1_drysurvival, delfall, deldiff, N0, N1, initializing, springmonitoring=False)
 
-    def sample_catch(self, M0, M1, Mw, age0_drysurvival, age1_drysurvival, delfall, deldiff, N0, N1, initializing, springmonitoring):
+    def sample_catch(self, M0, M1, age0_drysurvival, age1_drysurvival, delfall, deldiff, N0, N1, initializing, springmonitoring):
         '''
         sample catch data for monitoring and rescue data.
         if springmonitoring = True, sample for april monitoring data only, else sample for may through november monitoring data only + rescue data.
         '''
         # monitoring data
         if springmonitoring:
-            idx = np.isin(self.mdata['month'].values, self.springmonitoring_months) # april_idx
-            lastyridx = np.isin(self.mdata['month'].values, self.springmonitoring_months[1:]) # november_idx
+            idx = self.mdata['month'].values == 4 # april_idx
         else:
-            idx = ~np.isin(self.mdata['month'].values, self.springmonitoring_months) # non_april_idx
+            idx = self.mdata['month'].values !=4 # non_april_idx
         if(np.sum(idx)>0):
             ## get detectability parameters 
             ### theta
@@ -387,11 +387,7 @@ class Hatchery3_3_7:
                 mayjune_idx = (self.mdata['month'].values[idx]==5) | (self.mdata['month'].values[idx]==6)
                 C0[mayjune_idx] = 0 # no age 0 in may and june
                 self.mdata.loc[idx, 'catch0'] = C0
-                N1_adjusted = N1[self.mdata['reach'].values[idx]-1] * natural_m1 * age1_drysurvival[self.mdata['reach'].values[idx]-1]
-            else: 
-                natural_mw = np.exp(-Mw[self.mdata['reach'].values[lastyridx]-1] * (self.mdata['julian'].values[lastyridx] - 91)) # age 1+ natural mortality adjustment from fall to sampling day
-                N0_adjusted =
-
+            N1_adjusted = N1[self.mdata['reach'].values[idx]-1] * natural_m1 * age1_drysurvival[self.mdata['reach'].values[idx]-1]
             eC1 = N1_adjusted * theta *  self.p1 * f1
             C1 = np.random.negative_binomial(self.sz, self.sz/(self.sz + eC1))
             self.mdata.loc[idx, 'catch1'] = C1
@@ -425,9 +421,9 @@ class Hatchery3_3_7:
         # not doing rescue data for now (12/3/2025)
         if 1==0:
             if springmonitoring:
-                idx = np.isin(self.mdata['month'].values, self.springmonitoring_months) # april_idx
+                idx = self.rescue['month'].values == 4 # april_idx
             else:
-                idx = ~np.isin(self.mdata['month'].values, self.springmonitoring_months) # non_april_idx
+                idx = self.rescue['month'].values !=4 # non_april_idx
             if np.sum(idx)>0:
                 ## rescue theta is just the proportion of river dried that day. 
                 ### find a year where sum of delfall absolute difference accross 3 reaches is samllest
@@ -451,6 +447,7 @@ class Hatchery3_3_7:
                 ## sample rescue catch
                 R0 = np.random.negative_binomial(self.rsz, self.rsz/(self.rsz + eR0))
                 R1 = np.random.negative_binomial(self.rsz, self.rsz/(self.rsz + eR1))
+                print(R0+R1)
                 self.rescue.loc[idx, 'catch0'] = R0
                 self.rescue.loc[idx, 'catch1'] = R1
                 self.rescue.loc[idx, 'catch01'] = R0 + R1
@@ -463,25 +460,16 @@ class Hatchery3_3_7:
         if datatype == 1:
             # set up monitoring data dataframe
             # choose months of monitoring.
-            numsesh = np.random.choice(self.monitoring_sim_essentials['num_sesh_dist'],1)
+            numsesh = 7 #np.random.choice(self.monitoring_sim_essentials['num_sesh_dist'],1)
             seshmonth = np.sort(np.random.choice(np.array([4,5,6,7,8,9,10]),numsesh, replace=False))
             # number of sample pairs for each sesh (one for run and one for pool)
-            halfnumsamples = np.random.choice(self.monitoring_sim_essentials['halfnum_sample_dist'], numsesh) # (np.ones(numsesh)*23).astype(int) 
+            halfnumsamples = (np.ones(numsesh)*22).astype(int)  #np.random.choice(self.monitoring_sim_essentials['halfnum_sample_dist'], numsesh)
             # julians for each samples
             
             julians = []
             sample_reaches = []
             discharge = []
-            # for each session, generate julians and sample reaches. November gets added first because the fall timestep is october and the first data collected after fall step is november data.
-            # add november session. 
-            halfnumsamples_nov = np.random.choice(self.monitoring_sim_essentials['halfnum_sample_dist_nov'], 1) #np.array([23])
-            julians.append(np.ones(halfnumsamples_nov)*215) # all november samples on day 215 (Nov 1)
-            sample_reach_nov = np.random.multinomial(halfnumsamples_nov[0], self.monitoring_sim_essentials['sampledist_reach_nov'])
-            sample_reach_nov = np.concatenate(([1]*sample_reach_nov[0], [2]*sample_reach_nov[1], [3]*sample_reach_nov[2]))
-            sample_reaches.append(sample_reach_nov)
-            discharge_sample = np.random.choice(self.monitoring_sim_essentials['discharge_data_nov'], halfnumsamples_nov[0])
-            discharge.append(discharge_sample)
-            # add other months
+            # for each session, generate julians and sample reaches
             for i in range(len(halfnumsamples)):
                 sumsampledaymorethan30 = 1
                 while sumsampledaymorethan30:
@@ -491,20 +479,27 @@ class Hatchery3_3_7:
                 startdate = self.monitoring_sim_essentials['start_of_month_julian'][seshmonth[i]-4]
                 julian = np.concatenate((np.array([startdate]), startdate + np.cumsum(sampledaydiff)))
                 julians.append(julian)      
-                sample_reach = np.random.multinomial(halfnumsamples[i], self.monitoring_sim_essentials['sampledist_reach'])
+                sample_reach = np.array([5,8,9]) #np.random.multinomial(halfnumsamples[i], self.monitoring_sim_essentials['sampledist_reach'])
                 sample_reach = np.concatenate(([1]*sample_reach[0], [2]*sample_reach[1], [3]*sample_reach[2]))
                 sample_reaches.append(sample_reach)
                 unique_julians, inverse_indices = np.unique(julian, return_inverse=True)
                 discharge_unique = np.random.choice(self.monitoring_sim_essentials['discharge_data'][seshmonth[i]-4], len(unique_julians))
                 discharge_sample = discharge_unique[inverse_indices]
                 discharge.append(discharge_sample)
+            # add november session. 
+            halfnumsamples_nov = np.array([22]) #np.random.choice(self.monitoring_sim_essentials['halfnum_sample_dist_nov'], 1) #np.array([23])
+            julians.append(np.ones(halfnumsamples_nov)*215) # all november samples on day 215 (Nov 1)
+            sample_reach_nov = np.array([5,10,7]) #np.random.multinomial(halfnumsamples_nov[0], self.monitoring_sim_essentials['sampledist_reach_nov'])
+            sample_reach_nov = np.concatenate(([1]*sample_reach_nov[0], [2]*sample_reach_nov[1], [3]*sample_reach_nov[2]))
+            sample_reaches.append(sample_reach_nov)
+            discharge_sample = np.random.choice(self.monitoring_sim_essentials['discharge_data_nov'], halfnumsamples_nov[0])
+            discharge.append(discharge_sample)
 
-            # multiply the data by 2 for run and pool samples
             # flow
             discharge = np.concatenate(discharge)
             discharge = np.repeat(discharge,2) # for run and pool
             # repeat other variables for each habitat. 
-            repeated_months = np.concatenate((np.ones(halfnumsamples_nov[0]*2)*11,np.repeat(seshmonth, halfnumsamples*2))).astype(int)
+            repeated_months = np.concatenate((np.repeat(seshmonth, halfnumsamples*2), np.ones(halfnumsamples_nov[0]*2)*11)).astype(int)
             julians_flat = np.concatenate(julians)
             julians_flat = np.repeat(julians_flat,2)
             reaches_flat = np.repeat(np.concatenate(sample_reaches),2).astype(int)
@@ -653,7 +648,7 @@ class Hatchery3_3_7:
                 age1_drysurvival = ((1 - self.delfall) + self.tau*self.delfall + (1 - self.tau)*self.r1*self.phifall)
                 self.M0 = np.exp(np.random.normal(self.lM0mu, self.lM0sd))
                 self.M1 = np.exp(np.random.normal(self.lM1mu, self.lM1sd))
-                self.monitor(self.M0, self.M1, Mw, age0_drysurvival, age1_drysurvival, self.delfall, self.deldiff, np.zeros(self.n_reach), N0_next+N1_next,initializing=False)
+                self.monitor(self.M0, self.M1, age0_drysurvival, age1_drysurvival, self.delfall, self.deldiff, np.zeros(self.n_reach), N0_next+N1_next,initializing=False)
                 
             else: # spring
                 # demographic stuff (reproductin and summer survival)
@@ -685,7 +680,7 @@ class Hatchery3_3_7:
                     #extra_info['P'] = P
 
                 # monitoring data simulation.
-                self.monitor(self.M0, self.M1, None, age0_drysurvival, age1_drysurvival, self.delfall, self.deldiff, P, N0+N1, initializing=False)
+                self.monitor(self.M0, self.M1, age0_drysurvival, age1_drysurvival, self.delfall, self.deldiff, P, N0+N1, initializing=False)
                 # hatchery production for next year
                 Nh_next = np.array([np.round(a_prod * self.maxcap)]) # production target based on the springflow forecast
                 # flow stuff
@@ -728,12 +723,12 @@ class Hatchery3_3_7:
             varmonth = varname.split('_')[-1]
             monthidx = self.monthidx_dict[varmonth]
             if not initializing:
-                if season == 0: # spring season. skip updating april monitoring vars
+                if season == 0: # spring season. skip april monitoring vars
                     if varmonth != 'apr': # put the current variable values.
                         obsvar = self.obs[self.oidx[varname]]
                         obsvars.append(obsvar)
                         continue
-                else: # fall season. skip updating non-april monitoring vars
+                else: # fall season. skip non-april monitoring vars
                     if varmonth == 'apr': # put the current variable values.
                         obsvar = self.obs[self.oidx[varname]]
                         obsvars.append(obsvar)
@@ -755,21 +750,6 @@ class Hatchery3_3_7:
                             np.log(np.sum(catchdata_r2[7])+1),
                             np.log(np.sum(catchdata_r3[7])+1)])
                 obsvar[nosample] = -999
-            elif varname == 'effort_r_apr':
-                obsvar = np.array([np.sum(effort_r1[0]),
-                            np.sum(effort_r2[0]),
-                            np.sum(effort_r3[0])])
-                obsvar[nosample] = 0
-            elif varname == 'effort_r_oct':
-                obsvar = np.array([np.sum(effort_r1[6]),
-                            np.sum(effort_r2[6]),
-                            np.sum(effort_r3[6])])
-                obsvar[nosample] = 0
-            elif varname == 'effort_r_nov':
-                obsvar = np.array([np.sum(effort_r1[7]),
-                            np.sum(effort_r2[7]),
-                            np.sum(effort_r3[7])])
-                obsvar[nosample] = 0
             elif varname == 'log_maxcatch_r_apr':
                 obsvar = np.array([
                             np.log(np.max(catchdata_r1[0])+1) if nosample[0]==False else -999, 
@@ -788,6 +768,21 @@ class Hatchery3_3_7:
                             np.log(np.max(catchdata_r2[7])+1) if nosample[1]==False else -999,
                             np.log(np.max(catchdata_r3[7])+1) if nosample[2]==False else -999
                 ])
+            elif varname == 'effort_r_apr':
+                obsvar = np.array([np.sum(effort_r1[0]),
+                            np.sum(effort_r2[0]),
+                            np.sum(effort_r3[0])])
+                obsvar[nosample] = 0
+            elif varname == 'effort_r_oct':
+                obsvar = np.array([np.sum(effort_r1[6]),
+                            np.sum(effort_r2[6]),
+                            np.sum(effort_r3[6])])
+                obsvar[nosample] = 0
+            elif varname == 'effort_r_nov':
+                obsvar = np.array([np.sum(effort_r1[7]),
+                            np.sum(effort_r2[7]),
+                            np.sum(effort_r3[7])])
+                obsvar[nosample] = 0
             elif varname == 'log_cpue_r_apr': # cpue = catch per area sampled in 100m^2 = catch/effort*100
                 obsvar = np.array([
                             np.log((np.sum(catchdata_r1[0])/(np.sum(effort_r1[0])))*100 + 1) if nosample[0]==False else -999,
