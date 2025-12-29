@@ -12,7 +12,7 @@ def calc_performance(env, device, rms, fstack, policy, episodenum=1000, t_maxste
     For policy gradient methods, calculate performance using the policy network.
     """
     print('serial calc_performance called')
-    if env.envID in ['Hatchery3.2.2', 'Hatchery3.2.3','Hatchery3.2.4','Hatchery3.2.5','Hatchery3.2.6','Hatchery3.2.7','Hatchery3.3.1','Hatchery3.3.2','Hatchery3.3.5','Hatchery3.3.2.2','Hatchery3.3.3','Hatchery3.3.4','Hatchery3.4.1']:
+    if env.envID in ['Hatchery3.2.2', 'Hatchery3.2.3','Hatchery3.2.4','Hatchery3.2.5','Hatchery3.2.6','Hatchery3.2.7','Hatchery3.3.1','Hatchery3.3.2','Hatchery3.3.5','Hatchery3.3.6','Hatchery3.3.7','Hatchery3.3.2.2','Hatchery3.3.3','Hatchery3.3.4','Hatchery3.4.1']:
         actiondist = np.zeros(len(env.actionspace_dim)) # distribution of actions taken
         actiondistcount = 0
     avgrewards = 0
