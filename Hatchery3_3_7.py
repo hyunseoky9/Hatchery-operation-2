@@ -401,12 +401,26 @@ class Hatchery3_3_7:
             }
         # Fill requested metrics
         for metric in self.relmetrics:
-            if metric == "prop0":
+            if metric == 'logcatch0':
+                catch0 = m['catch0'].astype(np.int64, copy=False)
+                catch0_sum = np.zeros((nmonths, 3), dtype=np.float32)
+                np.add.at(catch0_sum, (mi, ri), catch0)
+                summary['catch0'] = catch0_sum
+            elif metric == 'logcatch1':
+                catch1 = m['catch1'].astype(np.int64, copy=False)
+                catch1_sum = np.zeros((nmonths, 3), dtype=np.float32)
+                np.add.at(catch1_sum, (mi, ri), catch1)
+                summary['catch1'] = catch1_sum
+            elif metric == "prop0":
                 # Prop0 pieces
                 np.add.at(zeros_count, (mi, ri), (catch01 == 0).astype(np.int64, copy=False))
                 with np.errstate(divide="ignore", invalid="ignore"):
                     prop0 = zeros_count / numsamples
                 summary[metric] = prop0.astype(np.float32)
+            elif metric == 'logmaxcatch':
+                # Max catch pieces
+                np.maximum.at(maxcatch, (mi, ri), catch01)
+                summary['maxcatch'] = maxcatch.astype(np.float32)
             elif metric == "poolprop":
                 # Pool proportion pieces
                 pool_effort = np.zeros((nmonths, 3), dtype=np.float32)
@@ -933,16 +947,6 @@ class Hatchery3_3_7:
                     obsvar[nosample] = 0
                 else:
                     obsvar = (0 * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([0], dtype=np.float32)
-            elif varmetric == 'logmaxcatch':
-                if not nomonth:
-                    if multimonth:
-                        obsvar = np.log(ms["catch"][month_is].max(axis=0) + 1.0)
-                    else:
-                        obsvar = np.log(ms["catch"][mi] + 1.0)
-                    obsvar = obsvar.astype(np.float32, copy=False)
-                    obsvar[nosample] = -999
-                else:
-                    obsvar = (-999 * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([-999], dtype=np.float32)
             elif varmetric == 'logcpue':
                 if not nomonth:
                     if multimonth:
@@ -952,17 +956,62 @@ class Hatchery3_3_7:
                     else:
                         e = ms["effort"][mi] + 1e-5
                         obsvar = np.log((ms["catch"][mi] / e) * 100.0 + 1.0)
-                    if np.any(np.isnan(obsvar)):
-                        print(f'error in {varname}')
-                        print(f"obsvar nan: {obsvar}, catch: {ms['catch'][mi]}, effort: {ms['effort'][mi]}")
-                        print(self.mdata)
-                        print(self.mdata['month'])
-                        print(self.mdata["catch01"])
-                        print(self.mdata['eC0'])
-                        print(self.mdata['eC1'])
-                        print(self.mdata['N_adjusted'])
-                        print(self.mdata['N0_adjusted'])
-                        print(self.mdata['N1_adjusted'])
+                    obsvar = obsvar.astype(np.float32, copy=False)
+                    obsvar[nosample] = -999
+                else:
+                    obsvar = (-999 * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([-999], dtype=np.float32)
+            elif varmetric == 'logcpue0':
+                if not nomonth:
+                    if multimonth:
+                        csum = ms["catch0"][month_is].sum(axis=0)
+                        esum = ms["effort"][month_is].sum(axis=0) + 1e-5
+                        obsvar = np.log((csum / esum) * 100.0 + 1.0)
+                    else:
+                        e = ms["effort"][mi] + 1e-5
+                        obsvar = np.log((ms["catch0"][mi] / e) * 100.0 + 1.0)
+                    obsvar = obsvar.astype(np.float32, copy=False)
+                    obsvar[nosample] = -999
+                else:
+                    obsvar = (-999 * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([-999], dtype=np.float32)
+            elif varmetric == 'logcpue1':
+                if not nomonth:
+                    if multimonth:
+                        csum = ms["catch1"][month_is].sum(axis=0)
+                        esum = ms["effort"][month_is].sum(axis=0) + 1e-5
+                        obsvar = np.log((csum / esum) * 100.0 + 1.0)
+                    else:
+                        e = ms["effort"][mi] + 1e-5
+                        obsvar = np.log((ms["catch1"][mi] / e) * 100.0 + 1.0)
+                    obsvar = obsvar.astype(np.float32, copy=False)
+                    obsvar[nosample] = -999
+                else:
+                    obsvar = (-999 * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([-999], dtype=np.float32)
+            elif varmetric == 'logcatch0':
+                if not nomonth:
+                    if multimonth:
+                        obsvar = np.log(ms["catch0"][month_is].sum(axis=0) + 1.0)
+                    else:
+                        obsvar = np.log(ms["catch0"][mi] + 1.0)
+                    obsvar = obsvar.astype(np.float32, copy=False)
+                    obsvar[nosample] = -999
+                else:
+                    obsvar = (-999 * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([-999], dtype=np.float32)
+            elif varmetric == 'logcatch1':
+                if not nomonth:
+                    if multimonth:
+                        obsvar = np.log(ms["catch1"][month_is].sum(axis=0) + 1.0)
+                    else:
+                        obsvar = np.log(ms["catch1"][mi] + 1.0)
+                    obsvar = obsvar.astype(np.float32, copy=False)
+                    obsvar[nosample] = -999
+                else:
+                    obsvar = (-999 * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([-999], dtype=np.float32)
+            elif varmetric == 'logmaxcatch':
+                if not nomonth:
+                    if multimonth:
+                        obsvar = np.log(ms["maxcatch"][month_is].max(axis=0) + 1.0)
+                    else:
+                        obsvar = np.log(ms["maxcatch"][mi] + 1.0)
                     obsvar = obsvar.astype(np.float32, copy=False)
                     obsvar[nosample] = -999
                 else:
