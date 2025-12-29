@@ -1,0 +1,2 @@
+seed,c,mean_reward,persistence_prob,local_dips_a,local_dips_i,local_dips_s,prod_action,stock_a,stock_i,stock_s
+98.0,1.0,2.053205602222222,0.89,0.136,0.101,0.072,0.92,0.4,0.29,0.3

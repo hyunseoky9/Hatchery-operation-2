@@ -171,6 +171,13 @@ class Hatchery3_3_7:
         self.lastyrage1_drysurvival = np.zeros(self.n_reach) # initiate lsatyr age1+ dry survival
         self.reach_area_per100sqm = np.array([123334.73, 87483.59, 85277.14]) # reach area per 100 sqm for stocking calculation
 
+        # timing variables.
+        self.setuptime = 0
+        self.sampletime = 0
+        self.summarizetime = 0
+
+
+        #self.relm = np.array([4,5,6,7,8,9,10,11])
         
         # range for each variables
         self.N0minmax = [0,1e7] 
@@ -335,6 +342,7 @@ class Hatchery3_3_7:
 
         Mw = np.exp(np.random.normal(self.lMwmu, self.lMwsd))
         self.monitor(M0, M1, Mw, age0_drysurvival, age1_drysurvival, np.exp(N0val), np.exp(N1val), None, None, initializing=True)
+
         obsvars = self._construct_obs(initializing=True)
         self.obs = np.concatenate((obsvars, np.concatenate(new_obs)))
 
@@ -349,90 +357,98 @@ class Hatchery3_3_7:
         if not initializing:
             if self.state[self.sidx['t']][0] == 1: # fall, set up the new monitoring dataframe and fill in spring
                 # set up
+                timestart = time.perf_counter()
                 self.mdata = self.monitoringdata_setup(datatype=1)
+                timeened = time.perf_counter()
+                self.setuptime += timeened - timestart
                 #self.rescue = self.monitoringdata_setup(datatype=2)
                 # fill in april monitoring data if there's monitoring session.
+                timestart = time.perf_counter()
                 self.sample_catch(M0, M1, Mw, age0_drysurvival, age1_drysurvival, N0, N1, novN0, novN1, initializing, springmonitoring=True)
+                timeened = time.perf_counter()
+                self.sampletime += timeened - timestart
             else: # spring, fill in monitoring data
+                timestart = time.perf_counter()
                 self.sample_catch(M0, M1, Mw, age0_drysurvival, age1_drysurvival, N0, N1, novN0, novN1, initializing, springmonitoring=False) 
+                timeened = time.perf_counter()
+                self.sampletime += timeened - timestart
         else: # initialization, N0 and N1 is fall population, not spring population when initializing. 
             # set up
+            timestart = time.perf_counter()
             self.mdata = self.monitoringdata_setup(datatype=1)
+            timeened = time.perf_counter()
+            self.setuptime += timeened - timestart
+
             #self.rescue = self.monitoringdata_setup(datatype=2)
             # fill in catch data
+            timestart = time.perf_counter()
             self.sample_catch(M0, M1, Mw, age0_drysurvival, age1_drysurvival, N0, N1, novN0, novN1, initializing, springmonitoring=True)
             self.sample_catch(M0, M1, Mw, age0_drysurvival, age1_drysurvival, N0, N1, novN0, novN1, initializing, springmonitoring=False)
+            timeened = time.perf_counter()
+            self.sampletime += timeened - timestart
+        timestart = time.perf_counter()
         self.monitoring_summary = self.summarize_monitoring()
+        timeened = time.perf_counter()
+        self.summarizetime += timeened - timestart
 
     def summarize_monitoring(self):
         """
         summarize the monitoring data
         """
-        m = self.mdata
-        relm = np.asarray(self.relm, dtype=np.int16)
-        nmonths = relm.size
-        month = m["month"].astype(np.int16, copy=False)
-        reach = m["reach"].astype(np.int8, copy=False)
-        # map month values to 0..nmonths-1; ignore months not in relm
-        mi = np.searchsorted(relm, month)
-        # reach index 0..2; ignore anything outside 1..3
-        ri = reach - 1
-        # Allocate aggregates
-        catch_sum = np.zeros((nmonths, 3), dtype=np.float32)
-        effort_sum = np.zeros((nmonths, 3), dtype=np.float32)
-        numsamples = np.zeros((nmonths, 3), dtype=np.int64)
-        zeros_count = np.zeros((nmonths, 3), dtype=np.int64)
-        maxcatch = np.zeros((nmonths, 3), dtype=np.int64)
-        # Values
-        catch01 = m["catch01"].astype(np.int64, copy=False)
-        effort = m["effort"].astype(np.float32, copy=False)
-        # Sum aggregates
-        np.add.at(catch_sum, (mi, ri), catch01)
-        np.add.at(effort_sum, (mi, ri), effort)
-        np.add.at(numsamples, (mi, ri), 1)
-        # Build DataFrames (cheap compared to groupby)
-        summary = {
-            "relm": relm,
-            "month_to_i": {int(mon): int(i) for i, mon in enumerate(relm)},
-            # core arrays
-            "catch": catch_sum,
-            "effort": effort_sum,
-            "numsamples": numsamples,
-            }
-        # Fill requested metrics
-        for metric in self.relmetrics:
-            if metric == "prop0":
-                # Prop0 pieces
-                np.add.at(zeros_count, (mi, ri), (catch01 == 0).astype(np.int64, copy=False))
-                with np.errstate(divide="ignore", invalid="ignore"):
-                    prop0 = zeros_count / numsamples
-                summary[metric] = prop0.astype(np.float32)
-            elif metric == "poolprop":
-                # Pool proportion pieces
-                pool_effort = np.zeros((nmonths, 3), dtype=np.float32)
-                if "habitat" in m and ('poolprop' in self.relmetrics):
-                    habitat = m["habitat"].astype(np.int8, copy=False)
-                    pool_mask = (habitat == 1)
-                    if np.any(pool_mask):
-                        mi_p = mi[pool_mask]
-                        ri_p = (m["reach"][pool_mask].astype(np.int8, copy=False) - 1)
-                        pool_eff = m["effort"][pool_mask].astype(np.float32, copy=False)
-                        np.add.at(pool_effort, (mi_p, ri_p), pool_eff)
-                with np.errstate(divide="ignore", invalid="ignore"):
-                    pool_prop = pool_effort / np.where(effort_sum == 0.0, np.nan, effort_sum)
-                summary[metric] = pool_prop.astype(np.float32)
-            elif metric == "logecatch":
-                # Expected catch
-                ecatch_sum = None
-                # compute only if needed; safe to compute always, it's cheap
-                ecatch_sum = np.zeros((nmonths, 3), dtype=np.float32)
-                eC01 = m["eC01"].astype(np.float32, copy=False)
-                np.add.at(ecatch_sum, (mi, ri), eC01)
-                if ecatch_sum is None:
-                    ecatch_sum = np.zeros((nmonths, 3), dtype=np.float32)
-                summary["ecatch"] = ecatch_sum
-        return summary
+        summary = {}
+        grp = self.mdata.groupby(["month", "reach"])
+        # fill in summary
+        catch_sum = grp["catch01"].sum().unstack("reach", fill_value=0)
+        catch_sum = catch_sum.reindex(self.relm, fill_value=0)
+        catch_sum = catch_sum.reindex(columns=[1, 2, 3], fill_value=0)  # Ensure all 3 reaches exist
+        effort_sum  = grp["effort"].sum().unstack("reach", fill_value=0)
+        effort_sum = effort_sum.reindex(self.relm, fill_value=0)
+        effort_sum = effort_sum.reindex(columns=[1, 2, 3], fill_value=0)  # Ensure all 3 reaches exist
 
+        summary['catch'] = catch_sum
+        for metric in self.relmetrics:
+            if metric == 'logcatch':
+                summary[metric] = np.log(catch_sum+1)
+            elif metric == 'logmaxcatch':
+                logcatch_max = np.log(grp["catch01"].max()+1).unstack("reach", fill_value=0)
+                logcatch_max = logcatch_max.reindex(self.relm, fill_value=0)
+                logcatch_max = logcatch_max.reindex(columns=[1, 2, 3], fill_value=0)  # Ensure all 3 reaches exist
+                summary[metric] = logcatch_max
+            elif metric == 'effort':
+                summary[metric] = effort_sum
+            elif metric == 'logcpue':
+                logcpue = np.log(catch_sum/effort_sum*100+1)
+                summary[metric] = logcpue
+            elif metric == 'numsamples':
+                numsamples = grp.size().unstack("reach", fill_value=0)
+                numsamples = numsamples.reindex(self.relm, fill_value=0)
+                numsamples = numsamples.reindex(columns=[1, 2, 3], fill_value=0)  # Ensure all 3 reaches exist
+                summary[metric] = numsamples
+            elif metric == 'prop0':
+                prop0 = grp.apply(lambda x: np.mean(x["catch01"] == 0)).unstack("reach", fill_value=0)
+                prop0 = prop0.reindex(self.relm, fill_value=0)
+                prop0 = prop0.reindex(columns=[1, 2, 3], fill_value=0)  # Ensure all 3 reaches exist
+                summary[metric] = prop0
+            elif metric == 'poolprop':
+                # Pool-only effort: filter habitat == 1
+                pool_effort = (
+                    self.mdata[self.mdata["habitat"] == 1]
+                    .groupby(["month", "reach"])["effort"]
+                    .sum()
+                    .unstack("reach", fill_value=0)
+                )
+                pool_effort = pool_effort.reindex_like(effort_sum).fillna(0) # Align shapes (in case some month/reach combinations are missing)
+                with np.errstate(divide='ignore', invalid='ignore'): # Compute pool proportion
+                    pool_prop = pool_effort / effort_sum.replace(0, np.nan)
+                summary[metric] = pool_prop
+            elif metric == 'logecatch':
+                ecatch = grp["eC01"].sum().unstack("reach", fill_value=0)
+                ecatch = ecatch.reindex(self.relm, fill_value=0)
+                ecatch = ecatch.reindex(columns=[1, 2, 3], fill_value=0)  # Ensure all 3 reaches exist
+                summary[metric] = np.log(ecatch+1)
+                summary['ecatch'] = ecatch
+
+        return summary
 
 
     def sample_catch(self, M0, M1, Mw, age0_drysurvival, age1_drysurvival, N0, N1, novN0, novN1, initializing, springmonitoring):
@@ -440,68 +456,61 @@ class Hatchery3_3_7:
         sample catch data for monitoring and rescue data.
         if springmonitoring = True, sample for april monitoring data only, else sample for may through november monitoring data only + rescue data.
         '''
-        month = self.mdata["month"]
-        reach = self.mdata["reach"]
-        julian = self.mdata["julian"]
-        discharge = self.mdata["discharge"]
-        habitat = self.mdata["habitat"]
-        effort = self.mdata["effort"]
-        
         # monitoring data
         if springmonitoring:
-            lastoctidx = np.isin(month, self.springmonitoring_months[1])
-            lastnovidx = np.isin(month, self.springmonitoring_months[2])
-            aprilidx   = np.isin(month, self.springmonitoring_months[0])
+            lastoctidx = np.isin(self.mdata['month'].values, self.springmonitoring_months[1]) # november idx
+            lastnovidx = np.isin(self.mdata['month'].values, self.springmonitoring_months[2]) # november idx
+            aprilidx = np.isin(self.mdata['month'].values, self.springmonitoring_months[0]) # april idx
             idx = lastoctidx | lastnovidx | aprilidx
         else:
-            idx = ~np.isin(month, self.springmonitoring_months) # non_april_idx
+            idx = ~np.isin(self.mdata['month'].values, self.springmonitoring_months) # non_april_idx
         if(np.sum(idx)>0):
             ## get detectability parameters 
             ### theta
             reachlenyridx = np.random.choice(np.arange(0,self.monitoring_sim_essentials['reach_wetlen'].shape[2]), 1)[0]
-            theta = 0.2/(self.monitoring_sim_essentials['reach_wetlen'][reach[idx]-1,julian[idx]-1,reachlenyridx])
+            theta = 0.2/(self.monitoring_sim_essentials['reach_wetlen'][self.mdata['reach'].values[idx]-1,self.mdata['julian'].values[idx]-1,reachlenyridx])
             ### f
-            xi_p0 = self.alpha0_int*discharge[idx]/(1 + self.alpha0_int*discharge[idx]/self.alpha0_max)
-            xi_p1 = self.alpha1_int*discharge[idx]/(1 + self.alpha1_int*discharge[idx]/self.alpha1_max)
-            xi_m0 = xi_p0 * ((habitat[idx] - 1)* (1/xi_p0 - 1) + 1) # this makes pool samples have xi_m0 = 1 and run samples have xi_m0 = xi_p0
-            xi_m1 = xi_p1 * ((habitat[idx] - 1)* (1/xi_p1 - 1) + 1)
+            xi_p0 = self.alpha0_int*self.mdata['discharge'].values[idx]/(1 + self.alpha0_int*self.mdata['discharge'].values[idx]/self.alpha0_max)
+            xi_p1 = self.alpha1_int*self.mdata['discharge'].values[idx]/(1 + self.alpha1_int*self.mdata['discharge'].values[idx]/self.alpha1_max)
+            xi_m0 = xi_p0 * ((self.mdata['habitat'].values[idx] - 1)* (1/xi_p0 - 1) + 1) # this makes pool samples have xi_m0 = 1 and run samples have xi_m0 = xi_p0
+            xi_m1 = xi_p1 * ((self.mdata['habitat'].values[idx] - 1)* (1/xi_p1 - 1) + 1)
             A0_perpool = logit(self.lA0_perpool) # logit to log
-            sl_width = np.exp(self.lsl_width[reach[idx]-1])
-            areavar1 = np.exp(A0_perpool + self.AtQ_perpool*discharge[idx])
-            areavar2 = 200*sl_width*discharge[idx]/(1+sl_width*discharge[idx]/self.bankfull[reach[idx]-1])
+            sl_width = np.exp(self.lsl_width[self.mdata['reach'].values[idx]-1])
+            areavar1 = np.exp(A0_perpool + self.AtQ_perpool*self.mdata['discharge'].values[idx])
+            areavar2 = 200*sl_width*self.mdata['discharge'].values[idx]/(1+sl_width*self.mdata['discharge'].values[idx]/self.bankfull[self.mdata['reach'].values[idx]-1])
             totpool = areavar1*areavar2
             totrun = (1-areavar1)*areavar2
-            f0 = np.minimum(effort[idx]*xi_m0/(xi_p0*totpool + totrun),1)
-            f1 = np.minimum(effort[idx]*xi_m1/(xi_p1*totpool + totrun),1)
+            f0 = np.minimum(self.mdata['effort'].values[idx]*xi_m0/(xi_p0*totpool + totrun),1)
+            f1 = np.minimum(self.mdata['effort'].values[idx]*xi_m1/(xi_p1*totpool + totrun),1)
             ## get mortality rates on the sampling day
             if initializing: # when initializing, N0 and N1 are fall population sizes, need to backtrack to spring population sizes
-                N0 = np.minimum(N0/(np.exp(-M0 * 124) * age0_drysurvival), np.exp(self.states['logN0'][1])) # age 0 population in spring
-                N1 = np.minimum(N1/(np.exp(-M1 * 215) * age1_drysurvival), np.exp(self.states['logN1'][1])) # age 1 population in spring
+                N0 = N0/(np.exp(-M0 * 124) * age0_drysurvival) # age 0 population in spring
+                N1 = N1/(np.exp(-M1 * 215) * age1_drysurvival) # age 1 population in spring
                 if springmonitoring:
-                    lastyrnovpop = np.minimum(N1/np.exp(-Mw * 150), np.exp(self.states['logN1'][1])) # age 1 population in last year november
+                    lastyrnovpop = N1/np.exp(-Mw * 150)
                     novN0 = lastyrnovpop*0.9 # age0 in last year november, assume 90% are age 0
                     novN1 = lastyrnovpop*0.1 # age1 in last year november, assume 10% are age 1
 
             ## get expected cathch
             if springmonitoring == False:
-                natural_m0 = np.exp(-M0[reach[idx]-1] * (julian[idx] - 91)) # age 0 natural mortality adjustment from fall to sampling day
-                natural_m1 = np.exp(-M1[reach[idx]-1] * julian[idx]) # age 0 natural mortality adjustment from fall to sampling day
-                N0_adjusted = N0[reach[idx]-1] * natural_m0 * age0_drysurvival[reach[idx]-1]
+                natural_m0 = np.exp(-M0[self.mdata['reach'].values[idx]-1] * (self.mdata['julian'].values[idx] - 91)) # age 0 natural mortality adjustment from fall to sampling day
+                natural_m1 = np.exp(-M1[self.mdata['reach'].values[idx]-1] * self.mdata['julian'].values[idx]) # age 0 natural mortality adjustment from fall to sampling day
+                N0_adjusted = N0[self.mdata['reach'].values[idx]-1] * natural_m0 * age0_drysurvival[self.mdata['reach'].values[idx]-1]
                 eC0 = N0_adjusted * theta *  self.p0 * f0
                 C0 = np.random.negative_binomial(self.sz, self.sz/(self.sz + eC0))
-                mayjune_idx = (month[idx]==5) | (month[idx]==6)
+                mayjune_idx = (self.mdata['month'].values[idx]==5) | (self.mdata['month'].values[idx]==6)
                 C0[mayjune_idx] = 0 # no age 0 in may and june
-                N1_adjusted = N1[reach[idx]-1] * natural_m1 * age1_drysurvival[reach[idx]-1]
+                N1_adjusted = N1[self.mdata['reach'].values[idx]-1] * natural_m1 * age1_drysurvival[self.mdata['reach'].values[idx]-1]
                 eC1 = N1_adjusted * theta *  self.p1 * f1
                 C1 = np.random.negative_binomial(self.sz, self.sz/(self.sz + eC1))
             else: 
-                N0lastnov_adjusted = novN0[reach[lastnovidx]-1]
-                N1lastnov_adjusted = novN1[reach[lastnovidx]-1]
-                natural_m1 = np.exp(-M1[reach[aprilidx]-1] * julian[aprilidx]) # age 0 natural mortality adjustment from fall to sampling day
-                N0lastoct_adjusted = novN0[reach[lastoctidx]-1]/(np.exp(-self.lastyrM0[reach[lastoctidx]-1] * (124 - (julian[lastoctidx]-91))) * self.lastyrage0_drysurvival[reach[lastoctidx]-1])
-                N1lastoct_adjusted = novN1[reach[lastoctidx]-1]/(np.exp(-self.lastyrM1[reach[lastoctidx]-1] * (215 - julian[lastoctidx])) * self.lastyrage1_drysurvival[reach[lastoctidx]-1])
+                N0lastnov_adjusted = novN0[self.mdata['reach'].values[lastnovidx]-1]
+                N1lastnov_adjusted = novN1[self.mdata['reach'].values[lastnovidx]-1]
+                natural_m1 = np.exp(-M1[self.mdata['reach'].values[aprilidx]-1] * self.mdata['julian'].values[aprilidx]) # age 0 natural mortality adjustment from fall to sampling day
+                N0lastoct_adjusted = novN0[self.mdata['reach'].values[lastoctidx]-1]/(np.exp(-self.lastyrM0[self.mdata['reach'].values[lastoctidx]-1] * (124 - (self.mdata['julian'].values[lastoctidx]-91))) * self.lastyrage0_drysurvival[self.mdata['reach'].values[lastoctidx]-1])
+                N1lastoct_adjusted = novN1[self.mdata['reach'].values[lastoctidx]-1]/(np.exp(-self.lastyrM1[self.mdata['reach'].values[lastoctidx]-1] * (215 - self.mdata['julian'].values[lastoctidx])) * self.lastyrage1_drysurvival[self.mdata['reach'].values[lastoctidx]-1])
                 N0april_adjusted = np.zeros(np.sum(aprilidx))
-                N1april_adjusted = N1[reach[aprilidx]-1] * natural_m1 * age1_drysurvival[reach[aprilidx]-1]
+                N1april_adjusted = N1[self.mdata['reach'].values[aprilidx]-1] * natural_m1 * age1_drysurvival[self.mdata['reach'].values[aprilidx]-1]
                 N0_adjusted = np.concatenate((N0lastoct_adjusted, N0lastnov_adjusted, N0april_adjusted))
                 N1_adjusted = np.concatenate((N1lastoct_adjusted,N1lastnov_adjusted, N1april_adjusted))
                 eC0 = N0_adjusted * theta *  self.p0 * f0
@@ -509,35 +518,32 @@ class Hatchery3_3_7:
                 C0 = np.random.negative_binomial(self.sz, self.sz/(self.sz + eC0))
                 C1 = np.random.negative_binomial(self.sz, self.sz/(self.sz + eC1))
                 
-            if np.any(C1<0):
-                foo = 0
-            self.mdata["catch0"][idx] = C0
-            self.mdata["catch1"][idx] = C1
-            self.mdata["catch01"][idx] = C0 + C1
 
-            self.mdata["eC0"][idx] = eC0
-            self.mdata["eC1"][idx] = eC1
-            self.mdata["eC01"][idx] = eC0 + eC1
-
-            self.mdata["f0"][idx] = f0
-            self.mdata["f1"][idx] = f1
-            self.mdata["theta"][idx] = theta
-            self.mdata["p0"][idx] = self.p0
-
-            # N0_adjusted / N1_adjusted differ by branch; ensure they exist
-            self.mdata["N0_adjusted"][idx] = N0_adjusted
-            self.mdata["N1_adjusted"][idx] = N1_adjusted
-            self.mdata["N_adjusted"][idx] = N0_adjusted + N1_adjusted
-            self.mdata["N0"][idx] = N0[reach[idx] - 1]
-            self.mdata["N1"][idx] = N1[reach[idx] - 1]
-            self.mdata["N"][idx] = self.mdata["N0"][idx] + self.mdata["N1"][idx]
-
-            if springmonitoring:
-                # mimic your special-case: last Oct/Nov catches not distinguishable by age
-                self.mdata["catch0"][lastnovidx] = 0
-                self.mdata["catch1"][lastnovidx] = 0
-                self.mdata["catch0"][lastoctidx] = 0
-                self.mdata["catch1"][lastoctidx] = 0
+            
+            self.mdata.loc[idx, 'catch0'] = C0
+            self.mdata.loc[idx, 'catch1'] = C1
+            self.mdata.loc[idx, 'catch01'] = self.mdata.loc[idx, 'catch0'] + self.mdata.loc[idx, 'catch1']
+            self.mdata.loc[idx, 'eC0'] = eC0
+            self.mdata.loc[idx, 'N0_adjusted'] = N0_adjusted
+            self.mdata.loc[idx, 'eC1'] = eC1
+            self.mdata.loc[idx, 'eC01'] = self.mdata.loc[idx, 'eC0'] + self.mdata.loc[idx, 'eC1']
+            self.mdata.loc[idx, 'f0'] = f0
+            self.mdata.loc[idx, 'f1'] = f1
+            self.mdata.loc[idx,'theta'] = theta
+            self.mdata.loc[idx,'p0'] = self.p0
+            self.mdata.loc[idx, 'N1_adjusted'] = N1_adjusted
+            self.mdata.loc[idx, 'N_adjusted'] = self.mdata.loc[idx, 'N0_adjusted'] + self.mdata.loc[idx, 'N1_adjusted']
+            self.mdata.loc[idx, 'N0'] = N0[self.mdata['reach'].values[idx]-1]
+            self.mdata.loc[idx, 'N1'] = N1[self.mdata['reach'].values[idx]-1]
+            self.mdata.loc[idx, 'N'] = self.mdata.loc[idx, 'N0'] + self.mdata.loc[idx, 'N1']
+            #print('C0:', C0)
+            #print('C1:', C1)
+            
+            if springmonitoring == True:
+                self.mdata.loc[lastnovidx, 'catch0'] = 0 # oct, nov catch is not distinguishable by age. Also, there's no age 0 in april, may, and june. 
+                self.mdata.loc[lastnovidx, 'catch1'] = 0  
+                self.mdata.loc[lastoctidx, 'catch0'] = 0
+                self.mdata.loc[lastoctidx, 'catch1'] = 0
 
         # rescue catch data
         # WARNING: issues with rescue data simualtion. 
@@ -652,46 +658,40 @@ class Hatchery3_3_7:
                 repeated_months = np.concatenate((np.ones(halfnumsamples_nov[0]*2)*11,np.repeat(seshmonth, halfnumsamples*2))).astype(int)
             julians_flat = np.concatenate(julians)
             julians_flat = np.repeat(julians_flat,2)
-            julians_flat = julians_flat.astype(int)
             reaches_flat = np.repeat(np.concatenate(sample_reaches),2).astype(int)
             habitat = np.tile(np.array([1,2]), np.sum(halfnumsamples)+halfnumsamples_nov[0]) # 1 = pool, 2 = run
             effort = np.zeros(np.sum(halfnumsamples)*2 + halfnumsamples_nov[0]*2)
             # 0 and even numbers get pool effort, odd numbers get run effort
-            N = repeated_months.shape[0]
             effort[1:len(effort):2] = np.random.choice(self.monitoring_sim_essentials['effort_run_dist'], len(effort)//2)
             effort[0:len(effort):2] = np.random.choice(self.monitoring_sim_essentials['effort_pool_dist'], len(effort)//2)
 
-            zf = np.zeros(N, dtype=np.float32)
-            zi = np.zeros(N, dtype=np.int64)
             # create dataframe
-            mdata = {'month':repeated_months,
-                            'julian':julians_flat,
-                            'reach':reaches_flat,
-                            'discharge':discharge,
-                            'habitat':habitat,
-                            'effort':effort,
-
-                            # dynamic (filled in sample_catch)
-                            "catch0": zi.copy(),
-                            "catch1": zi.copy(),
-                            "catch01": zi.copy(),
-                            "eC0": zf.copy(),
-                            "eC1": zf.copy(),
-                            "eC01": zf.copy(),
-                            "f0": zf.copy(),
-                            "f1": zf.copy(),
-                            "theta": zf.copy(),
-                            "p0": zf.copy(),
-                            "N0_adjusted": zf.copy(),
-                            "N1_adjusted": zf.copy(),
-                            "N_adjusted": zf.copy(),
-                            "N0": zf.copy(),
-                            "N1": zf.copy(),
-                            "N": zf.copy()                            
-                        }
+            self.mdata = pd.DataFrame({'month':repeated_months,
+                                'julian':julians_flat.astype(int),
+                                'reach':reaches_flat,
+                                'catch0':np.zeros((np.sum(halfnumsamples) + halfnumsamples_nov[0])*2),
+                                'catch1':np.zeros((np.sum(halfnumsamples) + halfnumsamples_nov[0])*2),
+                                'catch01':np.zeros((np.sum(halfnumsamples) + halfnumsamples_nov[0])*2),
+                                'discharge':discharge,
+                                'habitat':habitat,
+                                'effort':effort,
+                                'eC0': np.zeros((np.sum(halfnumsamples) + halfnumsamples_nov[0])*2),
+                                'eC1': np.zeros((np.sum(halfnumsamples) + halfnumsamples_nov[0])*2),
+                                'eC01': np.zeros((np.sum(halfnumsamples) + halfnumsamples_nov[0])*2),
+                                'f0': np.zeros((np.sum(halfnumsamples) + halfnumsamples_nov[0])*2),
+                                'f1': np.zeros((np.sum(halfnumsamples) + halfnumsamples_nov[0])*2),
+                                'theta': np.zeros((np.sum(halfnumsamples) + halfnumsamples_nov[0])*2),
+                                'p0': np.zeros((np.sum(halfnumsamples) + halfnumsamples_nov[0])*2),
+                                'N0_adjusted': np.zeros((np.sum(halfnumsamples) + halfnumsamples_nov[0])*2),
+                                'N1_adjusted': np.zeros((np.sum(halfnumsamples) + halfnumsamples_nov[0])*2),
+                                'N_adjusted': np.zeros((np.sum(halfnumsamples) + halfnumsamples_nov[0])*2),
+                                'N0': np.zeros((np.sum(halfnumsamples) + halfnumsamples_nov[0])*2),
+                                'N1': np.zeros((np.sum(halfnumsamples) + halfnumsamples_nov[0])*2),
+                                'N': np.zeros((np.sum(halfnumsamples) + halfnumsamples_nov[0])*2),
+                                })
             #with pd.option_context('display.max_rows', None):
             #    print(self.mdata)
-            return mdata
+            return self.mdata
         else: #datatype == 2
             random_indices = np.random.randint(0, len(self.monitoring_sim_essentials['samplesize_permonth_rescue']), size=self.monitoring_sim_essentials['samplesize_permonth_rescue'].shape[1])
             sampled_values = self.monitoring_sim_essentials['samplesize_permonth_rescue'].values[random_indices, np.arange(self.monitoring_sim_essentials['samplesize_permonth_rescue'].shape[1])]
@@ -875,145 +875,106 @@ class Hatchery3_3_7:
         List of observation variables are in Rinfo['observation_vars'].
         """
         season = self.state[self.sidx['t']][0]
-        ms = self.monitoring_summary
-        m2i = ms["month_to_i"]
+
         obsvars = []
 
         for varname in self.Rinfo['obsvars']:
             varnamesplit = varname.split('_')
-
             reachspecific = True if varnamesplit[1] == 'r' else False # whether the variable is reach specific
             multimonth = True if '+' in varnamesplit[-1] else False # whether the variable is multi-month metric
             varmonth = varnamesplit[-1] if multimonth==False else varnamesplit[-1].split('+') # month or list of months for the variable
+            monthidx = np.array([self.monthnum_dict[m] for m in varmonth]) if multimonth else self.monthnum_dict[varmonth]
             varmetric = varnamesplit[0] # metric of the variable
-            monthnum = np.array([self.monthnum_dict[m] for m in varmonth], dtype=np.int16) if multimonth else int(self.monthnum_dict[varmonth])
-
-
             if not initializing:
                 if season == 0: # spring season. skip updating non april/nov monitoring vars
-                    if np.all(~np.isin(monthnum,self.springmonitoring_months)): # put the current variable values.
+                    if np.all(~np.isin(monthidx,self.springmonitoring_months)): # put the current variable values.
                         obsvar = self.obs[self.oidx[varname]]
                         obsvars.append(obsvar)
                         continue
                 else: # fall season. skip updating april/nov monitoring vars
-                    if np.all(np.isin(monthnum,self.springmonitoring_months)): # put the current variable values.
+                    if np.all(np.isin(monthidx,self.springmonitoring_months)): # put the current variable values.
                         obsvar = self.obs[self.oidx[varname]]
                         obsvars.append(obsvar)
                         continue
-            if multimonth: # check if any month has no samples fot all or some reaches
-                month_is = [m2i.get(int(m), None) for m in monthnum]
-                month_is = np.array(month_is, dtype=np.int64)
-                nums = ms["numsamples"][month_is].sum(axis=0)
-                nosample = (nums == 0)
-                nomonth = (np.sum(~nosample) == 0)
+            if multimonth: # check if any month has no samples
+                numsamples = self.monitoring_summary['numsamples'].loc[monthidx].sum(axis=0)
+                nosample = (numsamples==0).values
             else:
-                mi = m2i.get(int(monthnum), None)
-                nums = ms["numsamples"][mi]
-                nosample = (nums == 0)
-                nomonth = (np.sum(~nosample) == 0)
+                numsamples = self.monitoring_summary['numsamples'].loc[monthidx]
+                nosample = (numsamples==0).values
+            nomonth = 1 if np.sum(~nosample) == 0 else 0
 
-            ## 12/19 start fixing from here.
-            # --- Compute obsvar by metric (same behavior as old .loc version) ---
             if varmetric == 'logcatch':
-                if not nomonth:
+                if nomonth == False:
                     if multimonth:
-                        obsvar = np.log(ms["catch"][month_is].sum(axis=0) + 1.0)
+                        obsvar = np.log((self.monitoring_summary['catch'].loc[monthidx]).sum(axis=0)+1).values
                     else:
-                        obsvar = np.log(ms["catch"][mi] + 1.0)
-                    obsvar = obsvar.astype(np.float32, copy=False)
+                        obsvar = self.monitoring_summary[varmetric].loc[monthidx].values
                     obsvar[nosample] = -999
-                else: # no data for all months
-                    obsvar = (-999 * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([-999], dtype=np.float32)
+                else:
+                    obsvar = -999 * np.ones(self.n_reach) if reachspecific else np.array([-999])
             elif varmetric == 'effort':
-                if not nomonth:
+                if nomonth == False:
                     if multimonth:
-                        obsvar = ms["effort"][month_is].sum(axis=0).astype(np.float32, copy=False)
+                        obsvar = (self.monitoring_summary['effort'].loc[monthidx].sum(axis=0)).values
                     else:
-                        obsvar = ms["effort"][mi].astype(np.float32, copy=False).copy()
+                        obsvar = self.monitoring_summary[varmetric].loc[monthidx].values
                     obsvar[nosample] = 0
                 else:
-                    obsvar = (0 * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([0], dtype=np.float32)
+                    obsvar = 0 * np.ones(self.n_reach) if reachspecific else np.array([0])
             elif varmetric == 'logmaxcatch':
-                if not nomonth:
+                if nomonth == False:
                     if multimonth:
-                        obsvar = np.log(ms["catch"][month_is].max(axis=0) + 1.0)
+                        obsvar = np.log((self.monitoring_summary['catch'].loc[monthidx]).max(axis=0)+1).values
                     else:
-                        obsvar = np.log(ms["catch"][mi] + 1.0)
-                    obsvar = obsvar.astype(np.float32, copy=False)
+                        obsvar = self.monitoring_summary[varmetric].loc[monthidx].values
                     obsvar[nosample] = -999
                 else:
-                    obsvar = (-999 * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([-999], dtype=np.float32)
+                    obsvar = -999 * np.ones(self.n_reach) if reachspecific else np.array([-999])
             elif varmetric == 'logcpue':
-                if not nomonth:
+                if nomonth == False:
                     if multimonth:
-                        csum = ms["catch"][month_is].sum(axis=0)
-                        esum = ms["effort"][month_is].sum(axis=0) + 1e-5
-                        obsvar = np.log((csum / esum) * 100.0 + 1.0)
+                        obsvar = np.log(((self.monitoring_summary['catch'].loc[monthidx].sum(axis=0))/
+                                        (self.monitoring_summary['effort'].loc[monthidx].sum(axis=0)+ 1e-5))*100 + 1).values # add a small value to avoid zero division
                     else:
-                        e = ms["effort"][mi] + 1e-5
-                        obsvar = np.log((ms["catch"][mi] / e) * 100.0 + 1.0)
-                    if np.any(np.isnan(obsvar)):
-                        print(f'error in {varname}')
-                        print(f"obsvar nan: {obsvar}, catch: {ms['catch'][mi]}, effort: {ms['effort'][mi]}")
-                        print(self.mdata)
-                        print(self.mdata['month'])
-                        print(self.mdata["catch01"])
-                        print(self.mdata['eC0'])
-                        print(self.mdata['eC1'])
-                        print(self.mdata['N_adjusted'])
-                        print(self.mdata['N0_adjusted'])
-                        print(self.mdata['N1_adjusted'])
-                    obsvar = obsvar.astype(np.float32, copy=False)
+                        obsvar = self.monitoring_summary[varmetric].loc[monthidx].values
                     obsvar[nosample] = -999
                 else:
-                    obsvar = (-999 * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([-999], dtype=np.float32)
+                    obsvar = -999 * np.ones(self.n_reach) if reachspecific else np.array([-999])
             elif varmetric == 'numsamples':
                 if multimonth:
-                    obsvar = nums.astype(np.float32, copy=False)
+                    obsvar = (self.monitoring_summary['numsamples'].loc[monthidx].sum(axis=0)).values
                 else:
-                    obsvar = nums.astype(np.float32, copy=False).copy()
-                # (no special missing handling in your old version)
+                    obsvar = self.monitoring_summary[varmetric].loc[monthidx].values
             elif varmetric == 'prop0':
-                # You used -1 as sentinel for "no samples"
-                if not nomonth:
-                    if "prop0" not in ms:
-                        raise KeyError("monitoring_summary is missing 'prop0' (needed by _construct_obs).")
-                    if multimonth:
-                        # weighted avg by numsamples
-                        w = ms["prop0"][month_is] * ms["numsamples"][month_is]
-                        obsvar = w.sum(axis=0) / (nums + 1e-5)
+                if nomonth == False:
+                    if multimonth: # weighted average of proportion of 0 catch by number of samples
+                        obsvar = (self.monitoring_summary['prop0'].loc[monthidx]*self.monitoring_summary['numsamples'].loc[monthidx]).sum(axis=0)
+                        obsvar = obsvar / (numsamples + 1e-5) # add a small value to avoid zero division
                     else:
-                        obsvar = ms["prop0"][mi].copy()
-                    obsvar = obsvar.astype(np.float32, copy=False)
-                    obsvar[nosample] = -999
+                        obsvar = self.monitoring_summary[varmetric].loc[monthidx].values
+                    obsvar[nosample] = -1
                 else:
-                    obsvar = (-999 * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([-999], dtype=np.float32)
+                    obsvar = -1 * np.ones(self.n_reach) if reachspecific else np.array([-1])
             elif varmetric == 'poolprop':
-                # You used -1 as sentinel for "no samples"
-                if not nomonth:
-                    if "poolprop" not in ms:
-                        raise KeyError("monitoring_summary is missing 'poolprop' (needed by _construct_obs).")
-                    if multimonth:
-                        w = ms["poolprop"][month_is] * ms["numsamples"][month_is]
-                        obsvar = w.sum(axis=0) / (nums + 1e-5)
+                if nomonth == False:
+                    if multimonth: # weighted average of pool proportion by number of samples
+                        obsvar = (self.monitoring_summary['poolprop'].loc[monthidx]*self.monitoring_summary['numsamples'].loc[monthidx]).sum(axis=0)
+                        obsvar = obsvar / (numsamples + 1e-5) # add a small value to avoid zero division
                     else:
-                        obsvar = ms["poolprop"][mi].copy()
-                    obsvar = obsvar.astype(np.float32, copy=False)
-                    obsvar[nosample] = -999
-                else:
-                    obsvar = (-999 * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([-999], dtype=np.float32)
+                        obsvar = self.monitoring_summary[varmetric].loc[monthidx].values
+                    obsvar[nosample] = -1
+                else:   
+                    obsvar = -1 * np.ones(self.n_reach) if reachspecific else np.array([-1])                
             elif varmetric == 'logecatch':
-                if not nomonth:
-                    if "ecatch" not in ms:
-                        raise KeyError("monitoring_summary is missing 'ecatch' (needed by _construct_obs).")
+                if nomonth == False:
                     if multimonth:
-                        obsvar = np.log(ms["ecatch"][month_is].sum(axis=0) + 1.0)
+                        obsvar = np.log((self.monitoring_summary['ecatch'].loc[monthidx]).sum(axis=0)+1).values
                     else:
-                        obsvar = np.log(ms["ecatch"][mi] + 1.0)
-                    obsvar = obsvar.astype(np.float32, copy=False)
+                        obsvar = self.monitoring_summary[varmetric].loc[monthidx].values
                     obsvar[nosample] = -999
                 else:
-                    obsvar = (-999 * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([-999], dtype=np.float32)
+                    obsvar = -999 * np.ones(self.n_reach) if reachspecific else np.array([-999])
             obsvars.append(obsvar)
         return np.concatenate(obsvars)
     
