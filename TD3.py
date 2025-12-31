@@ -23,6 +23,7 @@ from RunningMeanStd import RunningMeanStd
 from FixedMeanStd import FixedMeanStd
 from calc_performance2 import calc_performance
 from calc_performance2_parallel import calc_performance_parallel
+from killrule import killrule
 class TD3():
     """Reinforcement Learning agent that learns using TD3."""
     def __init__(self, env, paramdf, meta):
@@ -380,6 +381,10 @@ class TD3():
                 actor_current_lr = self.actor_opt.param_groups[0]['lr']
                 print(f"Episode {i_episode}, Learning Rate: A{np.round(actor_current_lr, 6)}/C1{np.round(critic1_current_lr, 6)}/C2{np.round(critic2_current_lr, 6)} Avg Performance: {inttestscore:.2f}")
                 print('-----------------------------------')
+                # rules for killing the training. 
+                if killrule(inttestscores, i_episode, self.env.envID):
+                    print(f'killing the training at episode {i_episode} as per killrule')
+                    break
             # decay the exploration noise sigma
             self.noise.sigma = max(self.exploration_sigma_end,self.exploration_sigma_start - (self.exploration_sigma_start - self.exploration_sigma_end) *(i_episode+1) / self.exploration_decay_steps) 
         print('calculating the average reward with the final Q network')

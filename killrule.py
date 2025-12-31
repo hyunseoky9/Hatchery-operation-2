@@ -1,0 +1,34 @@
+import numpy as np
+
+def killrule(scores, epi, env):
+    """A function to determine whether to stop training early based on performance.
+
+    Args:
+        inttestscores (list): List of average test scores from recent evaluations.
+        envID (int): Identifier for the environment being trained.
+
+    Returns:
+        bool: True if training should be stopped, False otherwise.
+    """
+    kill = False
+    scores = np.array(scores)
+    if env.envID == 'Hatchery3.3.7':
+        if env.c == 2.5:
+            # rule 1: if the performance hasn't improved by more than 2 points in the last 500 episodes.
+            if len(scores) >= 6:
+                diff = scores[-6:-1] - scores[-5:]
+                if np.all(diff <= 2):
+                    kill = True
+            # rule 2: by episode 600, if the run never exceeded 50, kill. 
+            if epi == 600:
+                if np.all(scores < 50):
+                    kill = True
+            # rule 3: by episode 1000, if the run never exceeded 68, kill.
+            if epi == 1000:
+                if np.all(scores < 68):
+                    kill = True
+        elif env.c == 1.5:
+            pass
+        else:
+            return kill == False
+    return kill            
