@@ -31,7 +31,16 @@ def killrule(scores, epi, env):
                     print(f'violated rule3 at episode {epi}, never exceeded 68 by episode 1000')
                     kill = True
         elif env.c == 1.5:
-            pass
+            if len(scores) >= 3:
+                # rule 1: if the performance is below 11 for the last 3 tests, kill.
+                if np.all((scores[-3:]<11)):
+                    print(f'violated rule1 at episode {epi}, if no improvement in last 3 tests')
+                    kill = True
+                # rule 2: if the performance is stuck between 16 and 20 for the last 3 tests, kill.
+                if np.all((scores[-3:]>16) & (scores[-3:]<20)):
+                    print(f'violated rule2 at episode {epi}, if stuck between 30 and 35 in last 3 tests')
+                    kill = True
+                
         else:
             return kill
     return kill            
