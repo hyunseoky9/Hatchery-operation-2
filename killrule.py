@@ -33,5 +33,5 @@ def killrule(scores, epi, env):
         elif env.c == 1.5:
             pass
         else:
-            return kill == False
+            return kill
     return kill            
