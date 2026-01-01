@@ -382,7 +382,7 @@ class TD3():
                 print(f"Episode {i_episode}, Learning Rate: A{np.round(actor_current_lr, 6)}/C1{np.round(critic1_current_lr, 6)}/C2{np.round(critic2_current_lr, 6)} Avg Performance: {inttestscore:.2f}")
                 print('-----------------------------------')
                 # rules for killing the training. 
-                if killrule(inttestscores, i_episode, self.env.envID):
+                if killrule(inttestscores, i_episode, self.env):
                     print(f'killing the training at episode {i_episode} as per killrule')
                     break
             # decay the exploration noise sigma
