@@ -40,7 +40,7 @@ def killrule(scores, epi, env):
                 if np.all((scores[-3:]>16) & (scores[-3:]<20)):
                     print(f'violated rule2 at episode {epi}, if stuck between 30 and 35 in last 3 tests')
                     kill = True
-                
+        
         else:
             return kill
     return kill            
