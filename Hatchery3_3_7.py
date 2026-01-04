@@ -163,6 +163,10 @@ class Hatchery3_3_7:
         self.monthnum_dict = {'apr':4,'may':5,'jun':6,'jul':7,'aug':8,'sep':9,'oct':10,'nov':11}
         self.springmonitoring_months = [4,10,11] # [4]
         self.relm, self.relmetrics = self.relevant_monthsNmetrics4obs(self.Rinfo['obsvars']) # relevant months and metrics
+        if 9 not in self.relm: 
+            self.relm = np.concatenate((self.relm, np.array([9]))) # make sure september is included for calculating carryover effect.
+        if 11 not in self.relm: 
+            self.relm = np.concatenate((self.relm, np.array([11]))) # make sure november is included for calculating carryover effect.
         self.novInRelm = np.isin(11, self.relm)
         self.octInRelm = np.isin(10, self.relm)
         self.lastyrM0 = np.zeros(self.n_reach) # initiate lastyrM0
@@ -600,15 +604,16 @@ class Hatchery3_3_7:
         if datatype == 1:
             # set up monitoring data dataframe
             # choose months of monitoring.
-            numsesh = np.random.choice(self.monitoring_sim_essentials['num_sesh_dist'] -1,1) # -1 is added because September session is assumed to always happen.
+            #numsesh = np.random.choice(self.monitoring_sim_essentials['num_sesh_dist'] -1,1) # -1 is added because September session is assumed to always happen.
+            numsesh = np.array([6]) #  assume all 7 sessions happen.
             seshmonth = np.sort(np.random.choice(np.array([4,5,6,7,8,10]),numsesh, replace=False, p=self.monitoring_sim_essentials['samplenum_prop_bymonth']))
             octexist = 1 if self.octInRelm and seshmonth[-1] == 10 else 0 # october session exists.
             seshmonth = np.concatenate((np.array([10]), seshmonth[0:-1], np.array([9]))) if octexist else np.concatenate((seshmonth, np.array([9])))
             seshmonth = seshmonth[np.isin(seshmonth,self.relm)] # get rid of months that are not in the observation variables. 
             numsesh = len(seshmonth)
             # number of sample pairs for each sesh (one for run and one for pool)
-            halfnumsamples = np.random.choice(self.monitoring_sim_essentials['halfnum_sample_dist'], numsesh-1) #(np.ones(numsesh)*22).astype(int)
-            halfnumsamples = np.concatenate((halfnumsamples, np.random.choice(self.monitoring_sim_essentials['halfnum_sample_dist_sep'], 1)))
+            halfnumsamples = np.random.choice(self.monitoring_sim_essentials['halfnum_sample_dist']*4, numsesh-1) #(np.ones(numsesh)*22).astype(int)
+            halfnumsamples = np.concatenate((halfnumsamples, np.random.choice(self.monitoring_sim_essentials['halfnum_sample_dist_sep']*4, 1)))
             # julians for each samples
             
             julians = []
@@ -617,7 +622,7 @@ class Hatchery3_3_7:
             # for each session, generate julians and sample reaches. November gets added first because the fall timestep is october and the first data collected after fall step is november data.
             # add november session. 
             if self.novInRelm:
-                halfnumsamples_nov = np.random.choice(self.monitoring_sim_essentials['halfnum_sample_dist_nov'], 1) #np.array([22]) # np.random.choice(self.monitoring_sim_essentials['halfnum_sample_dist_nov'], 1) #np.array([23])
+                halfnumsamples_nov = np.random.choice(self.monitoring_sim_essentials['halfnum_sample_dist_nov']*4, 1) #np.array([22]) # np.random.choice(self.monitoring_sim_essentials['halfnum_sample_dist_nov'], 1) #np.array([23])
                 julians.append(np.ones(halfnumsamples_nov)*215) # all november samples on day 215 (Nov 1)
                 # all 3 reaches should have at least one sample in november
                 sample_reach_nov = np.random.multinomial(halfnumsamples_nov[0] - 3, self.monitoring_sim_essentials['sampledist_reach_nov']) #np.array([5,10,7]); -3 because each reach will get 1 sample to ensure each reach has at least one sample.
