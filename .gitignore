@@ -24,3 +24,5 @@ __pycache__/
 *.pyc
 *.pyo
 synthetic_genotypes/
+# performance evaluation output csv files
+performance_summary_*.csv
