@@ -24,65 +24,60 @@ falldf_analysis$Y <- DR_data(falldf_analysis[,c('stock_a','stock_i','stock_s')])
 
 
 # models
-mod3.2 <- DirichReg(Y ~ log_popsize_a+ log_popsize_i+ log_popsize_s+ extinct_a+
-                      extinct_i+ extinct_s+ lowpop_a+ lowpop_i+ lowpop_s+ 
-                      gini+ log_popsize_axlog_popsize_s +
-                      log_popsize_ixlog_popsize_s + log_popsize_axlog_popsize_i+
-                      log_popsize_allinteractions| log_popsize_a + log_popsize_i + log_popsize_s,
+mod6.2 <- DirichReg(Y ~ log_catch_jul.aug.sep_a + log_catch_jul.aug.sep_i + log_catch_jul.aug.sep_s + lowcatch_jul.aug.sep_a+ lowcatch_jul.aug.sep_i+ lowcatch_jul.aug.sep_s+ 
+                      gini+ relcatchshare_jul.aug.sep_a + relcatchshare_jul.aug.sep_i,
                     falldf_analysis,model='alternative')  
 
-mod4.2 <- DirichReg(Y ~ log_popsize_a+ log_popsize_i+ log_popsize_s+ extinct_a+
-                      extinct_i+ extinct_s+ lowpop_a+ lowpop_i+ lowpop_s+ 
-                      gini+ log_popsize_axlog_popsize_s +
-                      log_popsize_ixlog_popsize_s + log_popsize_axlog_popsize_i+
-                      log_popsize_allinteractions + relshare_a| log_popsize_a + log_popsize_i + log_popsize_s,
+mod7.2 <- DirichReg(Y ~ log_catch_jul.aug.sep_a+ log_catch_jul.aug.sep_i+ log_catch_jul.aug.sep_s+ lowcatch_jul.aug.sep_a+ lowcatch_jul.aug.sep_i+ lowcatch_jul.aug.sep_s+ 
+                      relcatchshare_jul.aug.sep_a + relcatchshare_jul.aug.sep_i,
                     falldf_analysis,model='alternative')  
 
-mod5.2 <- DirichReg(Y ~ log_popsize_a+ log_popsize_i+ log_popsize_s+ lowpop_a+ lowpop_i+ lowpop_s+ 
-                      gini+ log_popsize_axlog_popsize_s +
-                      log_popsize_ixlog_popsize_s + log_popsize_axlog_popsize_i+
-                      log_popsize_allinteractions + relshare_a| log_popsize_a + log_popsize_i + log_popsize_s,
+mod8.2 <- DirichReg(Y ~ log_catch_jul.aug.sep_a + log_catch_jul.aug.sep_i+ log_catch_jul.aug.sep_s+ nocatch_jul.aug.sep_a+ nocatch_jul.aug.sep_i+nocatch_jul.aug.sep_s+
+                      lowcatch_jul.aug.sep_a+ lowcatch_jul.aug.sep_i+ lowcatch_jul.aug.sep_s+
+                      relcatchshare_jul.aug.sep_a + relcatchshare_jul.aug.sep_i,
                     falldf_analysis,model='alternative')  
 
-mod6.2 <- DirichReg(Y ~ log_popsize_a+ log_popsize_i+ log_popsize_s+ lowpop_a+ lowpop_i+ lowpop_s+ 
-                      gini+ relshare_a + relshare_i,
+mod9.2 <- DirichReg(Y ~ log_catch_jul.aug.sep_a+ log_catch_jul.aug.sep_i+ log_catch_jul.aug.sep_s+
+                      relcatchshare_jul.aug.sep_a + relcatchshare_jul.aug.sep_i,
                     falldf_analysis,model='alternative')  
 
-mod7.2 <- DirichReg(Y ~ log_popsize_a+ log_popsize_i+ log_popsize_s+ lowpop_a+ lowpop_i+ lowpop_s+ 
-                      relshare_a + relshare_i,
-                    falldf_analysis,model='alternative')  
+mod10.2 <- DirichReg(Y ~ log_catch_jul.aug.sep_a+ log_catch_jul.aug.sep_i+ log_catch_jul.aug.sep_s+
+                       nocatch_jul.aug.sep_a+ nocatch_jul.aug.sep_i+ nocatch_jul.aug.sep_s,
+                     falldf_analysis,model='alternative')  
 
-mod8.2 <- DirichReg(Y ~ log_popsize_a+ log_popsize_i+ log_popsize_s+ extinct_a+ extinct_i+extinct_s+ lowpop_a+ lowpop_i+ lowpop_s+ 
-                      relshare_a + relshare_i,
-                    falldf_analysis,model='alternative')  
-mod9.2 <- DirichReg(Y ~ log_popsize_a+ log_popsize_i+ log_popsize_s+ relshare_a + relshare_i,
-                    falldf_analysis,model='alternative')  
+mod11.2 <- DirichReg(Y ~ log_catch_jul.aug.sep_a+ log_catch_jul.aug.sep_i+ log_catch_jul.aug.sep_s,
+                     falldf_analysis,model='alternative')  
 
 # standardized version of mod9.2
 falldf_analysis_std <- falldf_analysis %>%
   mutate(
-    log_popsize_a_std = scale(log_popsize_a),
-    log_popsize_i_std = scale(log_popsize_i),
-    log_popsize_s_std = scale(log_popsize_s),
-    relshare_a_std    = scale(relshare_a),
-    relshare_i_std    = scale(relshare_i)
+    log_catch_jul.aug.sep_a_std = scale(log_catch_jul.aug.sep_a),
+    log_catch_jul.aug.sep_i_std = scale(log_catch_jul.aug.sep_i),
+    log_catch_jul.aug.sep_s_std = scale(log_catch_jul.aug.sep_s),
+    relcatchshare_jul.aug.sep_a_std    = scale(relcatchshare_jul.aug.sep_a),
+    relcatchshare_jul.aug.sep_i_std    = scale(relcatchshare_jul.aug.sep_i)
   )
 
 mod9.2_standardized <- DirichReg(
-  Y ~ log_popsize_a_std + log_popsize_i_std + log_popsize_s_std +
-    relshare_a_std + relshare_i_std,
+  Y ~ log_catch_jul.aug.sep_a_std + log_catch_jul.aug.sep_i_std + log_catch_jul.aug.sep_s_std +
+    relcatchshare_jul.aug.sep_a_std + relcatchshare_jul.aug.sep_i_std,
   data = falldf_analysis_std,
   model = "alternative"
 )
 
-summary(mod9.2)
+AIC(mod8.2)
+AIC(mod9.2)
+AIC(mod10.2)
+AIC(mod11.2)
+summary(mod10.2)
 summary(mod9.2_standardized)
 pred_mod9.2 = predict(mod9.2)
 
-obs = falldf_analysis[,c('stock_a','stock_i','stock_s')]
+
 # plot obs vs pred
 # congruence analysis (in SI2)
-plottingmod = mod8.2
+obs = falldf_analysis[,c('stock_a','stock_i','stock_s')]
+plottingmod = mod11.2
 plottingmod_pred = predict(plottingmod)
 congruence = pmin(plottingmod_pred,as.matrix(obs))
 mean(apply(congruence,1,sum)) # congruence
@@ -267,15 +262,15 @@ if(1==0)
     return(output)
   }
 }
-out <- plot_effect_ternary(mod9.2, falldf_analysis, K = 5,
+out <- plot_effect_ternary(mod10.2, falldf_analysis, K = 5,
                            y_cols = c("stock_a","stock_i","stock_s"),
                            cont_step = "sd")
 out$vecs # origin point of the vectors.
 out$top_tbl # vector coordinates
 out[[1]] # plot
 # save vecs as csv
-modname= 'mod9.2'
-ofilename = sprintf('G:/My Drive/research/nmsu/hatchery operation/codes/dynamic programming2/manuscript_results/stockingdistribution_effectvectors_seed%d_paramset%d_c%d_%s_hatchery3_3_6.csv',params[1],params[2],params[3],modname)
+modname= 'mod10.2'
+ofilename = sprintf('G:/My Drive/research/nmsu/hatchery operation/codes/dynamic programming2/manuscript_results/stockingdistribution_effectvectors_seed%d_paramset%d_c%d_%s_hatchery3_3_7.csv',params[1],params[2],params[3],modname)
 write.csv(out$vecs,ofilename,row.names=FALSE)
 
 
