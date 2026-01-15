@@ -174,7 +174,8 @@ class Hatchery3_3_7:
         self.lastyrage0_drysurvival = np.zeros(self.n_reach) # initiate lsatyr age0 dry survival
         self.lastyrage1_drysurvival = np.zeros(self.n_reach) # initiate lsatyr age1+ dry survival
         self.reach_area_per100sqm = np.array([123334.73, 87483.59, 85277.14]) # reach area per 100 sqm for stocking calculation
-
+        self.sample_all_months = Rinfo.get('sample_all_months', False) # if True, simulate all monitoring months every year.
+        self.sample_multiplier = Rinfo.get('sample_multiplier', 1) # multiplier for number of samples in each monitoring session.
         
         # range for each variables
         self.N0minmax = [0,1e7] 
@@ -604,16 +605,18 @@ class Hatchery3_3_7:
         if datatype == 1:
             # set up monitoring data dataframe
             # choose months of monitoring.
-            numsesh = np.random.choice(self.monitoring_sim_essentials['num_sesh_dist'] -1,1) # -1 is added because September session is assumed to always happen.
-            #numsesh = np.array([6]) #  assume all 7 sessions happen.
+            if self.sample_all_months:
+                numsesh = 6
+            else:
+                numsesh = np.random.choice(self.monitoring_sim_essentials['num_sesh_dist'] -1,1) # -1 is added because September session is assumed to always happen.
             seshmonth = np.sort(np.random.choice(np.array([4,5,6,7,8,10]),numsesh, replace=False, p=self.monitoring_sim_essentials['samplenum_prop_bymonth']))
             octexist = 1 if self.octInRelm and seshmonth[-1] == 10 else 0 # october session exists.
             seshmonth = np.concatenate((np.array([10]), seshmonth[0:-1], np.array([9]))) if octexist else np.concatenate((seshmonth, np.array([9])))
             seshmonth = seshmonth[np.isin(seshmonth,self.relm)] # get rid of months that are not in the observation variables. 
             numsesh = len(seshmonth)
             # number of sample pairs for each sesh (one for run and one for pool)
-            halfnumsamples = np.random.choice(self.monitoring_sim_essentials['halfnum_sample_dist'], numsesh-1) #(np.ones(numsesh)*22).astype(int)
-            halfnumsamples = np.concatenate((halfnumsamples, np.random.choice(self.monitoring_sim_essentials['halfnum_sample_dist_sep'], 1)))
+            halfnumsamples = np.random.choice(self.monitoring_sim_essentials['halfnum_sample_dist']*self.sample_multiplier, numsesh-1) #(np.ones(numsesh)*22).astype(int)
+            halfnumsamples = np.concatenate((halfnumsamples, np.random.choice(self.monitoring_sim_essentials['halfnum_sample_dist_sep']*self.sample_multiplier, 1)))
             # julians for each samples
             
             julians = []
@@ -642,6 +645,7 @@ class Hatchery3_3_7:
                         sumsampledaymorethan30 = 0
                 startdate = self.monitoring_sim_essentials['start_of_month_julian'][seshmonth[i]-4]
                 julian = np.concatenate((np.array([startdate]), startdate + np.cumsum(sampledaydiff)))
+                julian[np.where(julian - julian[0] > 29)[0]] = julian[0] + 29 # cap at 30 days
                 if seshmonth[i] == 9: # all 3 reaches should have at least one sample in september
                     sample_reach = np.random.multinomial(halfnumsamples[i] - 3, self.monitoring_sim_essentials['sampledist_reach']) #np.array([5,8,9]) ; -3 because each reach will get 1 sample to ensure each reach has at least one sample.
                     sample_reach = sample_reach + 1 # add 1 back to each reach

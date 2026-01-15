@@ -20,7 +20,7 @@ def simulator_hatchery3_3_7(envobsvars):
     #            'prop0_r_nov','prop0_r_apr+nov','poolprop_r_apr','poolprop_r_oct','poolprop_r_nov','poolprop_r_apr+nov','logecatch_r_apr','logecatch_r_oct',
     #            'logecatch_r_nov','logecatch_r_apr+nov','logecatch_r_apr+oct+nov','logecatch_r_jul+aug+sep','logecatch_r_sep','logecatch_r_aug+sep']
 #envobsvars = ['logcatch_r_apr','logcatch_r_oct','logcatch_r_nov','logcatch_r_apr+nov','numsamples_r_apr','numsamples_r_oct','numsamples_r_nov','effort_r_apr','effort_r_oct','effort_r_nov']
-    env = Hatchery3_3_7(None,1,-1,1,1,{'c':5,'no_genetics':0,'obsvars': envobsvars}) # initstate,parameterizationID,discretization,LCpredmethod
+    env = Hatchery3_3_7(None,1,-1,1,1,{'c':5,'no_genetics':0,'obsvars': envobsvars,'sample_multipler':4}) # initstate,parameterizationID,discretization,LCpredmethod
     #env = Hatchery3_3_1(None,1,-1,1,1,{'c':5,'no_genetics':0}) # initstate,parameterizationID,discretization,LCpredmethod
     #env = Hatchery3_4_1(None,1,-1,1,1,{'c':5,'no_genetics':0}) # initstate,parameterizationID,discretization,LCpredmethod
     #env = Hatchery3_3_2(None,1,-1,1,1,{'c':5,'no_genetics':0}) # initstate,parameterizationID,discretization,LCpredmethod
