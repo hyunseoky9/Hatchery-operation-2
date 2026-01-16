@@ -625,7 +625,7 @@ class Hatchery3_3_7:
             # for each session, generate julians and sample reaches. November gets added first because the fall timestep is october and the first data collected after fall step is november data.
             # add november session. 
             if self.novInRelm:
-                halfnumsamples_nov = np.random.choice(self.monitoring_sim_essentials['halfnum_sample_dist_nov'], 1) #np.array([22]) # np.random.choice(self.monitoring_sim_essentials['halfnum_sample_dist_nov'], 1) #np.array([23])
+                halfnumsamples_nov = np.random.choice(self.monitoring_sim_essentials['halfnum_sample_dist_nov']*self.sample_multiplier, 1) #np.array([22]) # np.random.choice(self.monitoring_sim_essentials['halfnum_sample_dist_nov'], 1) #np.array([23])
                 julians.append(np.ones(halfnumsamples_nov)*215) # all november samples on day 215 (Nov 1)
                 # all 3 reaches should have at least one sample in november
                 sample_reach_nov = np.random.multinomial(halfnumsamples_nov[0] - 3, self.monitoring_sim_essentials['sampledist_reach_nov']) #np.array([5,10,7]); -3 because each reach will get 1 sample to ensure each reach has at least one sample.
