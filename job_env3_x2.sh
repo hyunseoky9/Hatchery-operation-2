@@ -4,7 +4,7 @@
 #SBATCH --time=24:00:00           ## Job Duration
 #SBATCH --ntasks=1             ## Number of tasks (analyses) to run
 #SBATCH --cpus-per-task=8      ## The number of threads the code will use
-#SBATCH --mem-per-cpu=16G     ## Real memory(MB) per CPU required by the job.
+#SBATCH --mem-per-cpu=2G     ## Real memory(MB) per CPU required by the job.
 ARG=${1:-1}
 LOGFILE="zztrain_${ARG}_${SLURM_JOB_ID}.log"
 exec >"$LOGFILE" 2>&1              # send all output (stdout+stderr) to the log
