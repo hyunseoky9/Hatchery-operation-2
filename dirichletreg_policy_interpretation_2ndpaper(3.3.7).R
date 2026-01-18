@@ -69,7 +69,7 @@ AIC(mod8.2)
 AIC(mod9.2)
 AIC(mod10.2)
 AIC(mod11.2)
-summary(mod10.2)
+summary(mod11.2)
 summary(mod9.2_standardized)
 pred_mod9.2 = predict(mod9.2)
 
@@ -262,14 +262,14 @@ if(1==0)
     return(output)
   }
 }
-out <- plot_effect_ternary(mod10.2, falldf_analysis, K = 5,
+out <- plot_effect_ternary(mod11.2, falldf_analysis, K = 5,
                            y_cols = c("stock_a","stock_i","stock_s"),
                            cont_step = "sd")
 out$vecs # origin point of the vectors.
 out$top_tbl # vector coordinates
 out[[1]] # plot
 # save vecs as csv
-modname= 'mod10.2'
+modname= 'mod11.2'
 ofilename = sprintf('G:/My Drive/research/nmsu/hatchery operation/codes/dynamic programming2/manuscript_results/stockingdistribution_effectvectors_seed%d_paramset%d_c%d_%s_hatchery3_3_7.csv',params[1],params[2],params[3],modname)
 write.csv(out$vecs,ofilename,row.names=FALSE)
 
