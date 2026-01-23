@@ -2,10 +2,10 @@
 # different predictors.
 # Run the cell generating simulation_spring_transitions_seed....csv from the jupyter notebook first using fpidx=3 ([813438,122,5])
 #install.packages("betareg")
-rm(lis=ls())
+rm(list=ls())
 library(betareg)
-
-filename ="G:/My Drive/research/nmsu/hatchery operation/codes/dynamic programming2/manuscript_results/simulation_spring_transitions_seed813438_paramset122_c5_Hatchery3.3.7.csv"
+# filename ="G:/My Drive/research/nmsu/hatchery operation/codes/dynamic programming2/manuscript_results/simulation_spring_transitions_seed813438_paramset122_c5_Hatchery3.3.7.csv" # with all month + 4x sample size
+filename ="G:/My Drive/research/nmsu/hatchery operation/codes/dynamic programming2/manuscript_results/simulation_spring_transitions_seed940204_paramset132_c5_Hatchery3.3.7.csv"
 df = read.csv(filename)
 
 # prepare response
@@ -24,12 +24,13 @@ q = df$q_kaf
 gini = df$gini
 cv = df$CV
 
-df2 = data.frame(prod,logcatch_apr,logcatch_jul,logmincatch_apr,logmincatch_jul, logmincatch,q,cv)
+df2 = data.frame(prod,logcatch_apr,logcatch_jul,logmincatch_apr,logmincatch_jul,q,cv)
 
-df2[, c('logcatch_apr','logcatch_jul','logmincatch_apr','logmincatch_jul','logmincatch',"q","cv")] <-
-  scale(df2[, c('logcatch_apr','logcatch_jul','logmincatch_apr','logmincatch_jul', 'logmincatch',"q","cv")])
+df2[, c('logcatch_apr','logcatch_jul','logmincatch_apr','logmincatch_jul',"q","cv")] <-
+  scale(df2[, c('logcatch_apr','logcatch_jul','logmincatch_apr','logmincatch_jul',"q","cv")])
 
 cor(df2)
+
 model0 <- betareg(
     prod ~ 
     logcatch_apr +
@@ -121,7 +122,7 @@ model7 <- betareg(
 )
 
 
-AIC(model0,model1,model2,model3,model4,model5,model6,model7)
+# AIC(model0,model1,model2,model3,model4,model5,model6,model7) 
 summary(model7)
 
 # model 7 has least number of predictors with 2nd highest AIC with <2 difference from the best AIC

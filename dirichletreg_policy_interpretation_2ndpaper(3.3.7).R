@@ -17,7 +17,8 @@ library(purrr)
 
 # 1. Dirichlet regression and choosing best model
 rm(list=ls())
-params = c(813438,122,5)
+# params = c(813438,122,5) # 3.3.7 all month + 4x sample size per month
+params = c(940204,132,5)
 filename = sprintf("G:/My Drive/research/nmsu/hatchery operation/codes/dynamic programming2/manuscript_results/simulation_fall_transitions_seed%d_paramset%d_c%d_Hatchery3.3.7.csv",params[1],params[2],params[3])
 falldf_analysis <- read.csv(filename)
 falldf_analysis$Y <- DR_data(falldf_analysis[,c('stock_a','stock_i','stock_s')])
