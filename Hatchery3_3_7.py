@@ -419,9 +419,7 @@ class Hatchery3_3_7:
             elif metric == "prop0":
                 # Prop0 pieces
                 np.add.at(zeros_count, (mi, ri), (catch01 == 0).astype(np.int64, copy=False))
-                with np.errstate(divide="ignore", invalid="ignore"):
-                    prop0 = zeros_count / numsamples
-                summary[metric] = prop0.astype(np.float32)
+                summary[metric] = zeros_count.astype(np.int64) # save count of zeros instead of proportion. proportion calculated during observation construction to avoid divide by zero.
             elif metric == 'logmaxcatch':
                 # Max catch pieces
                 np.maximum.at(maxcatch, (mi, ri), catch01)
@@ -528,8 +526,6 @@ class Hatchery3_3_7:
                 C0 = np.random.negative_binomial(self.sz, self.sz/(self.sz + eC0))
                 C1 = np.random.negative_binomial(self.sz, self.sz/(self.sz + eC1))
                 
-            if np.any(C1<0):
-                foo = 0
             self.mdata["catch0"][idx] = C0
             self.mdata["catch1"][idx] = C1
             self.mdata["catch01"][idx] = C0 + C1
@@ -935,6 +931,7 @@ class Hatchery3_3_7:
                 nosample = (nums == 0)
                 nomonth = (np.sum(~nosample) == 0)
 
+            NAval = -1
             ## 12/19 start fixing from here.
             # --- Compute obsvar by metric (same behavior as old .loc version) ---
             if varmetric == 'logcatch':
@@ -944,9 +941,9 @@ class Hatchery3_3_7:
                     else:
                         obsvar = np.log(ms["catch"][mi] + 1.0)
                     obsvar = obsvar.astype(np.float32, copy=False)
-                    obsvar[nosample] = -999
+                    obsvar[nosample] = NAval
                 else: # no data for all months
-                    obsvar = (-999 * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([-999], dtype=np.float32)
+                    obsvar = (NAval * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([NAval], dtype=np.float32)
             elif varmetric == 'effort':
                 if not nomonth:
                     if multimonth:
@@ -966,9 +963,9 @@ class Hatchery3_3_7:
                         e = ms["effort"][mi] + 1e-5
                         obsvar = np.log((ms["catch"][mi] / e) * 100.0 + 1.0)
                     obsvar = obsvar.astype(np.float32, copy=False)
-                    obsvar[nosample] = -999
+                    obsvar[nosample] = NAval
                 else:
-                    obsvar = (-999 * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([-999], dtype=np.float32)
+                    obsvar = (NAval * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([NAval], dtype=np.float32)
             elif varmetric == 'logcpue0':
                 if not nomonth:
                     if multimonth:
@@ -979,9 +976,9 @@ class Hatchery3_3_7:
                         e = ms["effort"][mi] + 1e-5
                         obsvar = np.log((ms["catch0"][mi] / e) * 100.0 + 1.0)
                     obsvar = obsvar.astype(np.float32, copy=False)
-                    obsvar[nosample] = -999
+                    obsvar[nosample] = NAval
                 else:
-                    obsvar = (-999 * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([-999], dtype=np.float32)
+                    obsvar = (NAval * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([NAval], dtype=np.float32)
             elif varmetric == 'logcpue1':
                 if not nomonth:
                     if multimonth:
@@ -992,9 +989,9 @@ class Hatchery3_3_7:
                         e = ms["effort"][mi] + 1e-5
                         obsvar = np.log((ms["catch1"][mi] / e) * 100.0 + 1.0)
                     obsvar = obsvar.astype(np.float32, copy=False)
-                    obsvar[nosample] = -999
+                    obsvar[nosample] = NAval
                 else:
-                    obsvar = (-999 * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([-999], dtype=np.float32)
+                    obsvar = (NAval * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([NAval], dtype=np.float32)
             elif varmetric == 'logcatch0':
                 if not nomonth:
                     if multimonth:
@@ -1002,9 +999,9 @@ class Hatchery3_3_7:
                     else:
                         obsvar = np.log(ms["catch0"][mi] + 1.0)
                     obsvar = obsvar.astype(np.float32, copy=False)
-                    obsvar[nosample] = -999
+                    obsvar[nosample] = NAval
                 else:
-                    obsvar = (-999 * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([-999], dtype=np.float32)
+                    obsvar = (NAval * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([NAval], dtype=np.float32)
             elif varmetric == 'logcatch1':
                 if not nomonth:
                     if multimonth:
@@ -1012,9 +1009,9 @@ class Hatchery3_3_7:
                     else:
                         obsvar = np.log(ms["catch1"][mi] + 1.0)
                     obsvar = obsvar.astype(np.float32, copy=False)
-                    obsvar[nosample] = -999
+                    obsvar[nosample] = NAval
                 else:
-                    obsvar = (-999 * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([-999], dtype=np.float32)
+                    obsvar = (NAval * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([NAval], dtype=np.float32)
             elif varmetric == 'logmaxcatch':
                 if not nomonth:
                     if multimonth:
@@ -1022,9 +1019,9 @@ class Hatchery3_3_7:
                     else:
                         obsvar = np.log(ms["maxcatch"][mi] + 1.0)
                     obsvar = obsvar.astype(np.float32, copy=False)
-                    obsvar[nosample] = -999
+                    obsvar[nosample] = NAval
                 else:
-                    obsvar = (-999 * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([-999], dtype=np.float32)
+                    obsvar = (NAval * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([NAval], dtype=np.float32)
             elif varmetric == 'numsamples':
                 if multimonth:
                     obsvar = nums.astype(np.float32, copy=False)
@@ -1038,14 +1035,14 @@ class Hatchery3_3_7:
                         raise KeyError("monitoring_summary is missing 'prop0' (needed by _construct_obs).")
                     if multimonth:
                         # weighted avg by numsamples
-                        w = ms["prop0"][month_is] * ms["numsamples"][month_is]
+                        w = ms["prop0"][month_is]
                         obsvar = w.sum(axis=0) / (nums + 1e-5)
                     else:
-                        obsvar = ms["prop0"][mi].copy()
+                        obsvar = ms["prop0"][mi]/nums[mi].copy()
                     obsvar = obsvar.astype(np.float32, copy=False)
-                    obsvar[nosample] = -999
+                    obsvar[nosample] = NAval
                 else:
-                    obsvar = (-999 * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([-999], dtype=np.float32)
+                    obsvar = (NAval * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([NAval], dtype=np.float32)
             elif varmetric == 'poolprop':
                 # You used -1 as sentinel for "no samples"
                 if not nomonth:
@@ -1057,9 +1054,9 @@ class Hatchery3_3_7:
                     else:
                         obsvar = ms["poolprop"][mi].copy()
                     obsvar = obsvar.astype(np.float32, copy=False)
-                    obsvar[nosample] = -999
+                    obsvar[nosample] = NAval
                 else:
-                    obsvar = (-999 * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([-999], dtype=np.float32)
+                    obsvar = (NAval * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([NAval], dtype=np.float32)
             elif varmetric == 'logecatch':
                 if not nomonth:
                     if "ecatch" not in ms:
@@ -1069,9 +1066,9 @@ class Hatchery3_3_7:
                     else:
                         obsvar = np.log(ms["ecatch"][mi] + 1.0)
                     obsvar = obsvar.astype(np.float32, copy=False)
-                    obsvar[nosample] = -999
+                    obsvar[nosample] = NAval
                 else:
-                    obsvar = (-999 * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([-999], dtype=np.float32)
+                    obsvar = (NAval * np.ones(self.n_reach, dtype=np.float32)) if reachspecific else np.array([NAval], dtype=np.float32)
             obsvars.append(obsvar)
         return np.concatenate(obsvars)
     
