@@ -121,6 +121,8 @@ def calc_performance_gap(runid):
             delV = V_human - V_pi
             ep['performance_gap'].append((delV, V_human, V_pi))
         # save the updated episodes with performance gap and action distance metrics
+        # drop envcheckpoints
+        ep.pop('envcheckpoints', None)
         ofilename = pickle_filenames[epi].replace(".pkl", "_perfgap_updated.pkl") # add perfgap_updated to filename
         with open(ofilename, "wb") as f:
             pickle.dump(ep, f)                    
