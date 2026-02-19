@@ -84,8 +84,8 @@ def calc_performance_gap(runid):
                 ep['L1_a_dist'].append(None) # set action distance to None for spring steps
                 ep['euclidean_a_dist'].append(None) # set action distance to None for spring steps
                 continue
-            ep['L1_a_dist'].append(np.abs(ep['actions'][simstep] - ep['RLactions'][simstep]).sum())
-            ep['euclidean_a_dist'].append(np.sqrt(((ep['actions'][simstep] - ep['RLactions'][simstep])**2).sum()))
+            ep['L1_a_dist'].append(np.abs(ep['actions'][simstep][1:] - ep['RLactions'][simstep][1:]).sum())
+            ep['euclidean_a_dist'].append(np.sqrt(((ep['actions'][simstep][1:] - ep['RLactions'][simstep][1:])**2).sum()))
             # calculate performance gap
             env_og = ep['envcheckpoints'][simstep]
             V_human = 0
