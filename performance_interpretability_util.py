@@ -48,7 +48,7 @@ def calc_performance_gap(runid):
     # setting parameters
     ## performance gap calculation parameters
     horizon = 20 # 10 years
-    iterations = 20#1000
+    iterations = 1000
     ## RL policy parameters
     config = {'seed': 983543, 'paramset': 163}
 
