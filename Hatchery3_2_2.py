@@ -766,7 +766,7 @@ class Hatchery3_2_2:
             stock_scaled_flr[np.argsort(scaledfrac)[::-1][0:np.abs(round(margin))]] += 1
         return list(stock_scaled_flr.astype(int))
 
-    def NeCalc0(self, N0, N1, p, Nb, genT, kappa, season):
+    def NeCalc0(self, N0, N1, p, Nb, genT, kappa, season,var_sensitivity_test=1):
         """
         Calculate the effective population size (Ne). 
         intput:
@@ -791,8 +791,58 @@ class Hatchery3_2_2:
             b             = bvals[0]                                 # mean-α row
             recruitvar    = ((bvals[1:] - b)**2 * self.alphaprob[:,None,None]).sum(0)
             grate         = self.sa[:,None] + b/2
-            var_dg        = self.sa[:,None]*(1-self.sa[:,None]) + b/4 + recruitvar/4
+            var_dg        = self.sa[:,None]*(1-self.sa[:,None]) + b/4 + (recruitvar)*var_sensitivity_test/4
             factor = (var_dg/(grate**2) * self.kappa_prob * self.combo_delfallprob[:,None]).sum()
+
+
+
+            # ---- processed scalars (all are WEIGHTED) ----
+            # weights used in factor
+            W = self.kappa_prob[:, None] * self.combo_delfallprob[None, :]  # (nκ, ndel)
+            # Build weights and FORCE them to match b's shape
+            W = self.kappa_prob[:, None] * self.combo_delfallprob[None, :]   # (nκ, ndel) probably (19,14)
+            if W.shape != b.shape:
+                W = W.T  # now (14,19) if b is (14,19)
+            # make sa broadcastable to (nκ, ndel)
+            # common cases:
+            #   sa shape (nκ,) or (nκ,1) -> works with [:, None]
+            #   sa shape (nκ,ndel) -> already aligned
+            sa_mat = self.sa
+            if sa_mat.ndim == 1:
+                sa_mat = sa_mat[:, None]          # (nκ,1) -> broadcasts across ndel
+            elif sa_mat.ndim == 2:
+                pass                              # assume (nκ,ndel) already
+            else:
+                raise ValueError(f"Unexpected sa shape: {sa_mat.shape}")
+
+            # weighted mean sa (scalar)
+            sa_bar = float((sa_mat * W).sum())
+
+            # term_sa uses E[ sa(1-sa) ] under same weights (better than sa_bar*(1-sa_bar))
+            term_sa = float(((sa_mat * (1 - sa_mat)) * W).sum())
+
+            bw_bar = float((b * W).sum())                 # weighted mean b
+            recruitvar_eff = float((recruitvar * W).sum())# weighted mean recruitvar
+
+            term_bw = bw_bar / 4.0
+            term_recruit = (recruitvar_eff * var_sensitivity_test) / 4.0
+            share_recruit = term_recruit / (term_sa + term_bw + term_recruit)
+
+            diag = {
+                "sa_bar": sa_bar,
+                "term_sa": term_sa,
+                "bw_bar": bw_bar,
+                "term_bw": term_bw,
+                "recruitvar_eff": recruitvar_eff,
+                "term_recruit": term_recruit,
+                "share_recruit": share_recruit,
+                "factor": float(factor),
+                "totN": float(totN0 + totN1),
+            }
+            print(diag)
+            # ---------------------------------------------------#
+
+
             #print(f'factor: {factor}, totN: {totN0+totN1}')
             New = (totN0+totN1)/factor
             New = np.array([New / genT]) # generation time adjusted wild Ne.
@@ -817,7 +867,10 @@ class Hatchery3_2_2:
                 Neh = Nb * self.Ne2Nratio
                 # apply Ryman-Laikre effect to calculate effective population size
                 Ne = np.array([1/(x**2/Neh + (1-x)**2/(New))])
-                
+                # ---------------------printout 
+                #print(f'x: {x}; stocked_cont: {stocked_cont}; total_cont: {total_cont}' )
+                #print(f'x^2/Neh: {x**2/Neh} ; (1-x)^2/New: {(1-x)**2/New}')
+                # -----------------------------
             return Ne, Neh, New
 
     def parameter_reset(self, paramsampleidx=None):

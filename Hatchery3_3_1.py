@@ -110,7 +110,7 @@ class Hatchery3_3_1:
 
         # parameter posterior distribution 
         if self.param_uncertainty:
-            param_uncertainty_filename = 'uncertain_parameters_posterior_samples4POMDP.csv'
+            param_uncertainty_filename = 'uncertain_parameters_posterior_samples4POMDP.csv' # from pop_model_param_output.R
             self.param_uncertainty_df = pd.read_csv(param_uncertainty_filename)
             self.paramsampleidx = None # initiate sample idx.
 
@@ -158,7 +158,12 @@ class Hatchery3_3_1:
         mask            = self.lkappa_prob > 1e-3            # keep only useful combos
         self.kappa_exp  = np.exp(np.stack([A[mask], B[mask], B[mask]], axis=-1))  # (nκ,3)
         self.kappa_prob = self.lkappa_prob[mask]             # (nκ,)
-        
+
+        # multiplier to the variance of reproductive success. 
+        if Rinfo.get('multiplier') is not None:
+            self.multiplier = Rinfo['multiplier']
+        else:
+            self.multiplier = 1
 
         ## calculate different alpha values (number of eggs produced per spawner) and their probabilities in the posterior distribution
         ## (used for calculating sigma^2_{b_w} in the document Hatchery 3.2).
@@ -891,7 +896,7 @@ class Hatchery3_3_1:
             b             = bvals[0]                                 # mean-α row
             recruitvar    = ((bvals[1:] - b)**2 * self.alphaprob[:,None,None]).sum(0)
             grate         = self.sa[:,None] + b/2
-            var_dg        = self.sa[:,None]*(1-self.sa[:,None]) + b/4 + recruitvar/4
+            var_dg        = self.sa[:,None]*(1-self.sa[:,None]) + b/4 + recruitvar*self.multiplier/4
             factor = (var_dg/(grate**2) * self.kappa_prob * self.combo_delfallprob[:,None]).sum()
 
             New = (totN0+totN1)/factor

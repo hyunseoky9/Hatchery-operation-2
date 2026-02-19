@@ -31,7 +31,12 @@ Implementation grade RGSM hatchery augmentation environments
 - *Hatchery3_3_3.py*: even easeir version of hatchery 3.3.2 where there's no separation of seasons but the actions are still production and distribution instead of distribution and discarding as in 3.2.x
 - *Hatchery3_3_4.py*: same as hatchery 3.3.1 but has perfect information on some of the parameters. You can specify which parameters you want to have perfect info on.
 - *Hatchery3_4_1.py*: same as hatchery 3.3.1 but you can carry over the produced fish for 1 year.
-  
+- *Hatchery3_3_5.py*: same as 3.3.1, but no more genetic process and genetic cost. Instead, you have economic cost that accounts for financial and implicit labor cost.
+For 2nd project with observation process
+- *Hatchery3_3_6.py*: same  as 3.3.5, but fixed the summer mortality rate sampling. Start of the 2nd project with monitoring process
+- *Hatchery3_3_7.py*: latent process same  as 3.3.6, includes observation process with catch data now.
+
+
 Tiger POMDP (Chades et al. 2008)
 - *tiger.py*: Tiger POMDP used for testing DRQN
   
@@ -50,6 +55,13 @@ These jupytre notebooks are not available on this repository (ignored when commi
 ### Additional notebooks
 - *effective population size calculation.ipynb*: effective population size calculation note
 - *effective population size validation.ipynb*: validation of the effective population size model to the actual LDNe data from Osborne et al. 2024 using the population estimates from Yackulic et al. 2023
+- *env3.x_human_performance.ipynb*: user run simulation process for Hatchery 3.3.1. Outputs user play data with the simulation.
+- *results.ipynb*: analysis of the simulation results. A lot of the figures in the main manuscripts for the 1st project are in this notebook. 
+For 2nd project
+- *results copy.ipynb*: analysis of the simulation results for the 2nd project. 
+- *decision-tool.ipynb*: made for presenting the decision model options to the hatchery manager for selecting a model for the decision tool. 
+- *monitoring_simulation_pre-analysis.ipynb*: calls the empirical data on things needed for simulating observation process (e.g., effort, daily flow, # of sessions per yr, etc.). Creates monitoring_sim_essentials.pkl which is a required file for running Hatchery 3.3.7
+- *monitoring_simulation_pre-analysis.ipynb2*: some initial analysis and investigation work when building the observation process of Hatchery3.3.7. Contains correlation analysis between abundance and catch with differnet monitoring scenarios and month aggregation schemes that is in SI of the manuscript. 
 ### Optimization algorithms
 #### value iteration
 - *value_iteration.py*: perform value iteration
