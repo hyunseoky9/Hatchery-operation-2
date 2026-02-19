@@ -126,14 +126,14 @@ def calc_performance_gap(runid):
         ofilename = pickle_filenames[epi].replace(".pkl", "_perfgap_updated.pkl") # add perfgap_updated to filename
         with open(ofilename, "wb") as f:
             pickle.dump(ep, f)                    
-                
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Calculate performance gap for a given runid')
-    parser.add_argument('--runid', type=str, required=True, help='Run ID to process')
-    args = parser.parse_args()
+    #parser = argparse.ArgumentParser(description='Calculate performance gap for a given runid')
+    #parser.add_argument('--runid', type=str, required=True, help='Run ID to process')
+    #args = parser.parse_args()
     
     t0 = time.time()
-    calc_performance_gap(args.runid)
-    #calc_performance_gap(1) # for testing, use runid=1
+    #calc_performance_gap(args.runid)
+    calc_performance_gap(1) # for testing, use runid=1
     elapsed = time.time() - t0
     print(f"Done. Elapsed time: {elapsed:.2f} seconds ({elapsed/60:.2f} minutes)")
