@@ -123,7 +123,7 @@ def calc_performance_gap(runid):
         # save the updated episodes with performance gap and action distance metrics
         ofilename = pickle_filenames[epi].replace(".pkl", "_perfgap_updated.pkl") # add perfgap_updated to filename
         with open(ofilename, "wb") as f:
-            pickle.dump(episodes, f)                    
+            pickle.dump(epi, f)                    
                 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Calculate performance gap for a given runid')
