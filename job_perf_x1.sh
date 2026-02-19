@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH --job-name=TD3      ## Name of the job
+#SBATCH --job-name=P_Igap      ## Name of the job
 #SBATCH --time=24:00:00           ## Job Duration
 #SBATCH --ntasks=1             ## Number of tasks (analyses) to run
 #SBATCH --cpus-per-task=8      ## The number of threads the code will use
@@ -16,4 +16,4 @@ module purge
 source ~/miniconda3/bin/activate hatchery
 export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1}
 
-srun python TD3_env3_x_main_HPC.py --runid "$ARG"
+srun python performance_interpretability_util.py --runid "$ARG"
