@@ -129,12 +129,12 @@ def calc_performance_gap(runid):
         print(f"Saved updated episode with performance gap to {ofilename}")            
 
 if __name__ == "__main__":
-    #parser = argparse.ArgumentParser(description='Calculate performance gap for a given runid')
-    #parser.add_argument('--runid', type=str, required=True, help='Run ID to process')
-    #args = parser.parse_args()
+    parser = argparse.ArgumentParser(description='Calculate performance gap for a given runid')
+    parser.add_argument('--runid', type=str, required=True, help='Run ID to process')
+    args = parser.parse_args()
     
     t0 = time.time()
-    #calc_performance_gap(args.runid)
-    calc_performance_gap(2) # for testing, use runid=1
+    calc_performance_gap(args.runid)
+    #calc_performance_gap(2) # for testing, use runid=1
     elapsed = time.time() - t0
     print(f"Done. Elapsed time: {elapsed:.2f} seconds ({elapsed/60:.2f} minutes)")
