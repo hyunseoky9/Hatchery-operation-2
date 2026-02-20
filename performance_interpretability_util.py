@@ -77,7 +77,7 @@ def calc_performance_gap(runid):
         ep['euclidean_a_dist'] = []
         simsteps = np.arange(len(ep['envcheckpoints']))
         ep['performance_gap'] = []
-        print(f'calculating performance gap for {len(simsteps)} steps')
+        print(f'calculating performance gap for episode {pickle_filenames[epi]} with {len(simsteps)} steps')
         for simstep in simsteps:
             if (ep['states'][simstep][-1] == 0) or (simstep == simsteps[-1]): # spring step, skip
                 ep['performance_gap'].append((None, None, None)) # add None for spring steps
@@ -125,7 +125,8 @@ def calc_performance_gap(runid):
         ep.pop('envcheckpoints', None)
         ofilename = pickle_filenames[epi].replace(".pkl", "_perfgap_updated.pkl") # add perfgap_updated to filename
         with open(ofilename, "wb") as f:
-            pickle.dump(ep, f)                    
+            pickle.dump(ep, f)
+        print(f"Saved updated episode with performance gap to {ofilename}")            
 
 if __name__ == "__main__":
     #parser = argparse.ArgumentParser(description='Calculate performance gap for a given runid')
