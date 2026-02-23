@@ -68,6 +68,7 @@ def calc_performance_gap(runid):
             rms = pickle.load(f)
     device = torch.device('cpu')  # Force CPU usage
     Policy = torch.load(policy_filename, weights_only=False)
+    Policy.eval() # set to eval mode
     Policy = Policy.to(device) 
     fstack = 1 if not hasattr(Policy, 'fstack') else Policy.fstack
     print(f'number of episodes loaded: {len(episodes)}')
@@ -114,16 +115,21 @@ def calc_performance_gap(runid):
                         t += 1
                         if t >= horizon:
                             done = True
-                if i == 0:
-                    V_human = rewards
-                else:
-                    V_pi = rewards
+                    if i == 0:
+                        V_human += rewards
+                    else:
+                        V_pi += rewards
+            # average across iterations
+            V_human = V_human / iterations 
+            V_pi = V_pi / iterations
             delV = V_human - V_pi
             ep['performance_gap'].append((delV, V_human, V_pi))
         # save the updated episodes with performance gap and action distance metrics
         # drop envcheckpoints
         ep.pop('envcheckpoints', None)
         ofilename = pickle_filenames[epi].replace(".pkl", "_perfgap_updated.pkl") # add perfgap_updated to filename
+        # change directory from ./human_play_results/ to ./human_play_results/performance_gap_calculated/
+        ofilename = ofilename.replace("./human_play_results/", "./human_play_results/performance_gap_calculated/")
         with open(ofilename, "wb") as f:
             pickle.dump(ep, f)
         print(f"Saved updated episode with performance gap to {ofilename}")            
