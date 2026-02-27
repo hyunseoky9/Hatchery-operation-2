@@ -48,16 +48,6 @@ class PPOMemory:
         self.dones = []    
 
 class PPOAgent:
-
-
-        self.agent = Agent(
-                        c1=self.c1, c2=self.c2, entropy_loss=self.entropy_loss_included,  # loss coefficients
-                        minibatch_size=self.minibatch_size,  # minibactch size
-                        policy_clip=self.policy_clip, # PPO clipping parameter
-                        gamma=self.gamma, gae_lambda=self.gae_lambda, # discount factor and GAE lambda
-                        n_epochs=self.n_epochs, # number of epochs for updating the policy
-                        actor=actor, critic=critic) 
-
     def __init__(self, c1, c2, entropy_loss, 
                  minibatch_size,
                  policy_clip,

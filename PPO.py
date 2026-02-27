@@ -1,14 +1,17 @@
 import numpy
-from ppo_torch import Agent
+from ppoagent import PPOAgent
 from setup_logger import setup_logger
-import shutilimport os
+import shutil
+import torch
+import os
 import numpy as np
 from calc_performance2 import calc_performance
 from calc_performance2_parallel import calc_performance_parallel
 from ppo_actor import Actor_beta_dirichlet
 from ppo_critic import Critic
+import random
 
-class PPO()
+class PPO():
     def __init__(self, env, paramdf, meta):
         """
         PPO agent.
@@ -59,7 +62,7 @@ class PPO()
         # parameters
         ## NN parameters
         self.state_size = len(self.env.obsspace_dim)
-        self.action_size = len(self.actionspace_dim)
+        self.action_size = len(self.env.actionspace_dim)
         self.actor_hidden_num = int(paramdf['actor_hidden_num']) # number of hidden layers in the actor network
         self.actor_hidden_size = eval(paramdf['actor_hidden_size']) # size of hidden layers in the actor network
         self.critic_hidden_num = int(paramdf['critic_hidden_num']) # number of hidden layers in the critic network for trunk
@@ -103,7 +106,7 @@ class PPO()
 
         # create networks
         if 'Hatchery3.3.' in self.env.envID:
-            actor = Actor_betadirichlet(self.state_size, self.action_size+1, # add 1 for the beta parameter, which is the first output, and the rest are for the dirichlet distribution (total of 5 outputs for 4 actions)
+            actor = Actor_beta_dirichlet(self.state_size, self.action_size+1, # add 1 for the beta parameter, which is the first output, and the rest are for the dirichlet distribution (total of 5 outputs for 4 actions)
                                         self.actor_hidden_size, self.actor_hidden_num,
                                         self.actor_lrdecayrate, self.actor_lr,
                                         self.actor_min_lr, self.actor_lrdecaytype, 
@@ -116,7 +119,7 @@ class PPO()
                         self.scheduler_info, self.device)
         
         # create agent
-        self.agent = Agent(c1=self.c1, c2=self.c2, entropy_loss=self.entropy_loss_included,  # loss coefficients
+        self.agent = PPOAgent(c1=self.c1, c2=self.c2, entropy_loss=self.entropy_loss_included,  # loss coefficients
                         minibatch_size=self.minibatch_size,  # minibactch size
                         policy_clip=self.policy_clip, # PPO clipping parameter
                         gamma=self.gamma, gae_lambda=self.gae_lambda, # discount factor and GAE lambda
@@ -154,6 +157,7 @@ class PPO()
             score_history.append(score)
             avg_score = numpy.mean(score_history[-100:])
 
+            # is this really the best way to save?
             if avg_score > best_score:
                 best_score = avg_score
                 self.agent.save_models()

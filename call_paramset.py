@@ -16,10 +16,13 @@ def call_paramset(filename,id):
     for key in keys:
         if key=='notes' or key=='score':
             continue
-        if ';' in paramdf[key]:
-            tunekeys.append(key)
-            vals = paramdf[key].split(';')
-            tunekeyvals.append(vals)
+        try:
+            if ';' in paramdf[key]:
+                tunekeys.append(key)
+                vals = paramdf[key].split(';')
+                tunekeyvals.append(vals)
+        except:
+            foo = 0
     # Generate all combinations of tuning parameters
     for combination in product(*tunekeyvals):
         temp_paramdf = paramdf.copy()

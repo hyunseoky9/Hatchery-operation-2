@@ -4,15 +4,16 @@ import torch as T
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+from torch.optim.lr_scheduler import ExponentialLR, LambdaLR, MultiStepLR, CosineAnnealingLR
 
-class ActorNetwork(nn.Module):
+class Actor_beta_dirichlet(nn.Module):
     def __init__(self, input_dims, n_actions, 
                  hidden_size, hidden_num, 
                     lrdecayrate, lr,
                     min_lr, lrdecaytype,
                     scheduler_info, device):
         
-        super(ActorNetwork, self).__init__()
+        super(Actor_beta_dirichlet, self).__init__()
 
         # build the model
         layers = [nn.Linear(input_dims, hidden_size[0]), nn.ReLU()]
@@ -47,4 +48,3 @@ class ActorNetwork(nn.Module):
         # merge a,b, and c back together
         x = T.cat((a.unsqueeze(1), b.unsqueeze(1), c), dim=1)
         return x
-    

@@ -8,7 +8,6 @@ import numpy as np
 import torch.nn.functional as F
 import torch
 from torch import nn
-from torchvision.transforms import ToTensor
 from torch.optim.lr_scheduler import ExponentialLR, LambdaLR, MultiStepLR, CosineAnnealingLR
 import pickle
 import os

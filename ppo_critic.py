@@ -3,7 +3,7 @@ import numpy as np
 import torch as T
 import torch.nn as nn
 import torch.optim as optim
-from torch.distributions.categorical import Categorical
+from torch.optim.lr_scheduler import ExponentialLR, LambdaLR, MultiStepLR, CosineAnnealingLR
 
 class Critic(nn.Module):
     def __init__(self, input_dims,
@@ -37,4 +37,3 @@ class Critic(nn.Module):
         value = self.critic(state)
 
         return value
-    
