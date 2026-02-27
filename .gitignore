@@ -18,6 +18,7 @@ figures/
 manuscript_results/ 
 pomdp/
 human_play_results/
+ericyangyuppo/
 .vscode/
 # Ignore Python cache files and directories
 __pycache__/
