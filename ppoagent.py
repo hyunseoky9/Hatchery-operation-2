@@ -57,6 +57,7 @@ class PPOAgent:
                  policy_clip,
                  gamma, gae_lambda,
                  n_epochs,
+                 adv_normalization,
                  actor, critic):
         self.gamma = gamma
         self.gae_lambda = gae_lambda
@@ -68,6 +69,7 @@ class PPOAgent:
         self.actor = actor
         self.critic = critic
         self.memory = PPOMemory(minibatch_size)
+        self.adv_normalization = adv_normalization
 
     def remember(self, state, action, probs, vals, reward, done, entropy=None):
         self.memory.store_memory(state, probs, vals, action, reward, done, entropy)
@@ -110,6 +112,9 @@ class PPOAgent:
                     discount *= self.gamma * self.gae_lambda
                 advantage[t] = a_t
             advantage = T.tensor(advantage).to(self.actor.device)
+            # Advantage normalization (once per epoch, before minibatches)
+            if self.adv_normalization:
+                advantage = (advantage - advantage.mean()) / (advantage.std(unbiased=False) + 1e-10)
 
             values = T.tensor(values).to(self.actor.device)
             for batch in batches:

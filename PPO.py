@@ -75,12 +75,12 @@ class PPO():
         self.critic_hidden_size = eval(paramdf['critic_hidden_size']) # size of hidden layers in the critic network for trunk
 
         ## training parameters
+        self.advantage_normalization = bool(int(paramdf['advantage_normalization'])) # whether to normalize advantages
         self.rolloutlen = paramdf['rollout_len'] # e.g., 20
         self.minibatch_size = paramdf['minibatch_size'] # e.g., 5 
         self.n_epochs = paramdf['n_epochs'] # e.g., 4
         self.max_steps = paramdf['max_steps'] # maximum steps per episode, e.g., 1000
         self.episodenum = int(paramdf['episodenum'])
-
 
         ## learning rates
         self.actor_lr = float(paramdf['actor_lr']) # learning rate for actor network
@@ -112,6 +112,7 @@ class PPO():
         self.gamma = float(paramdf['gamma']) # discount factor
         self.gae_lambda = float(paramdf['gae_lambda']) # GAE lambda parameter
 
+
         # print out the parameters
         print(f'paramID: {self.paramid}, iteration: {self.iteration}, seed: {self.seed}')
         print(f"env: {self.env.envID}")
@@ -123,6 +124,7 @@ class PPO():
         print(f"critic lr: {self.critic_lr}, critic lr decay rate: {self.critic_lrdecayrate}, critic min lr: {self.critic_min_lr}")
         print(f"standardize: {self.standardize}")
         print(f"gamma: {self.gamma}, gae_lambda: {self.gae_lambda}")
+        print(f'advantage normalization: {self.advantage_normalization}')
         print(f"c1: {self.c1}, c2: {self.c2}, entropy_loss_included: {self.entropy_loss_included}, policy_clip: {self.policy_clip}")
         print(f'rollout length: {self.rolloutlen}, minibatch size: {self.minibatch_size}, n_epochs: {self.n_epochs}')
         print(f"evaluation interval: {self.evaluation_interval}, performance sampleN: {self.performance_sampleN}")
@@ -148,6 +150,7 @@ class PPO():
                         policy_clip=self.policy_clip, # PPO clipping parameter
                         gamma=self.gamma, gae_lambda=self.gae_lambda, # discount factor and GAE lambda
                         n_epochs=self.n_epochs, # number of epochs for updating the policy
+                        adv_normalization=self.advantage_normalization, # whether to normalize advantages
                         actor=actor, critic=critic) # actor and critic networks
 
         # create standarization tool
