@@ -5,15 +5,18 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.optim.lr_scheduler import ExponentialLR, LambdaLR, MultiStepLR, CosineAnnealingLR
+from torch.distributions import Beta, Dirichlet
+
 
 class Actor_beta_dirichlet(nn.Module):
     def __init__(self, input_dims, n_actions, 
                  hidden_size, hidden_num, 
                     lrdecayrate, lr,
                     min_lr, lrdecaytype,
-                    scheduler_info, device):
+                    scheduler_info, device, entropy_loss):
         
         super(Actor_beta_dirichlet, self).__init__()
+        self.entropy_loss = entropy_loss
 
         # build the model
         layers = [nn.Linear(input_dims, hidden_size[0]), nn.ReLU()]
@@ -48,3 +51,40 @@ class Actor_beta_dirichlet(nn.Module):
         # merge a,b, and c back together
         x = T.cat((a.unsqueeze(1), b.unsqueeze(1), c), dim=1)
         return x
+
+    def getdist(self, x):
+        # process beta dist paramgeters
+        a = F.softplus(x[:, 0]) + 1e-3
+        b = F.softplus(x[:, 1]) + 1e-3
+        a = T.clamp(a, max=1e3)
+        b = T.clamp(b, max=1e3)
+        # process dirichlet dist parameters
+        c = F.softplus(x[:, 2:]) + 1e-3
+        c = T.clamp(c, max=1e3)
+
+        betadist = Beta(a, b)
+        dirichletdist = Dirichlet(c)
+        return betadist, dirichletdist
+    
+    def get_log_prob(self, states, actions):
+        x = self.actor(states)
+        betadist, dirichletdist = self.getdist(x)
+        betalogprob = betadist.log_prob(actions[:, 0])
+        dirichletlogprob = dirichletdist.log_prob(actions[:, 1:])
+        logprob = betalogprob + dirichletlogprob
+        return logprob
+    
+    def getaction(self, state):
+        x = self.actor(state)
+        betadist, dirichletdist = self.getdist(x)
+        # get action
+        action = np.concatenate([betadist.sample().cpu().detach().numpy(), dirichletdist.sample().cpu().detach().numpy()], axis=-1)
+        # get log prob
+        betalogprob = betadist.log_prob(action[0])
+        dirichletlogprob = dirichletdist.log_prob(action[1:])
+        logprob = betalogprob + dirichletlogprob
+        # get entropy
+        ent = betadist.entropy() + dirichletdist.entropy()  if self.entropy_loss else None
+        
+        return action, logprob, ent
+

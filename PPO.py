@@ -1,3 +1,4 @@
+import pickle
 import numpy
 from ppoagent import PPOAgent
 from setup_logger import setup_logger
@@ -10,6 +11,10 @@ from calc_performance2_parallel import calc_performance_parallel
 from ppo_actor import Actor_beta_dirichlet
 from ppo_critic import Critic
 import random
+from FixedMeanStd import FixedMeanStd
+from RunningMeanStd import RunningMeanStd
+from torch.optim.lr_scheduler import ExponentialLR, LambdaLR, MultiStepLR, CosineAnnealingLR
+
 
 class PPO():
     def __init__(self, env, paramdf, meta):
@@ -19,6 +24,7 @@ class PPO():
         paramdf: DataFrame containing hyperparameters for the agent
         meta: metadata (paramid, iteration, seed) for logging and saving results
         """
+        self.algorithmID = 'PPO'
         self.paramdf = paramdf
         # define parameters
         ## env setup
@@ -69,10 +75,12 @@ class PPO():
         self.critic_hidden_size = eval(paramdf['critic_hidden_size']) # size of hidden layers in the critic network for trunk
 
         ## training parameters
-        self.rolloutlen = paramdf['rolloutlen'] # e.g., 20
+        self.rolloutlen = paramdf['rollout_len'] # e.g., 20
         self.minibatch_size = paramdf['minibatch_size'] # e.g., 5 
         self.n_epochs = paramdf['n_epochs'] # e.g., 4
         self.max_steps = paramdf['max_steps'] # maximum steps per episode, e.g., 1000
+        self.episodenum = int(paramdf['episodenum'])
+
 
         ## learning rates
         self.actor_lr = float(paramdf['actor_lr']) # learning rate for actor network
@@ -104,13 +112,29 @@ class PPO():
         self.gamma = float(paramdf['gamma']) # discount factor
         self.gae_lambda = float(paramdf['gae_lambda']) # GAE lambda parameter
 
+        # print out the parameters
+        print(f'paramID: {self.paramid}, iteration: {self.iteration}, seed: {self.seed}')
+        print(f"env: {self.env.envID}")
+        print(f"device: {self.device}")
+        print(f"state size: {self.state_size}, action size: {self.action_size}")
+        print(f"actor: hidden num: {self.actor_hidden_num}, hidden size: {self.actor_hidden_size}")
+        print(f"critic: hidden num: {self.critic_hidden_num}, hidden size: {self.critic_hidden_size}")
+        print(f"actor lr: {self.actor_lr}, actor lr decay rate: {self.actor_lrdecayrate}, actor min lr: {self.actor_min_lr}")
+        print(f"critic lr: {self.critic_lr}, critic lr decay rate: {self.critic_lrdecayrate}, critic min lr: {self.critic_min_lr}")
+        print(f"standardize: {self.standardize}")
+        print(f"gamma: {self.gamma}, gae_lambda: {self.gae_lambda}")
+        print(f"c1: {self.c1}, c2: {self.c2}, entropy_loss_included: {self.entropy_loss_included}, policy_clip: {self.policy_clip}")
+        print(f'rollout length: {self.rolloutlen}, minibatch size: {self.minibatch_size}, n_epochs: {self.n_epochs}')
+        print(f"evaluation interval: {self.evaluation_interval}, performance sampleN: {self.performance_sampleN}")
+        print(f"max steps: {self.max_steps}, episodenum: {self.episodenum}")
+
         # create networks
         if 'Hatchery3.3.' in self.env.envID:
             actor = Actor_beta_dirichlet(self.state_size, self.action_size+1, # add 1 for the beta parameter, which is the first output, and the rest are for the dirichlet distribution (total of 5 outputs for 4 actions)
                                         self.actor_hidden_size, self.actor_hidden_num,
                                         self.actor_lrdecayrate, self.actor_lr,
                                         self.actor_min_lr, self.actor_lrdecaytype, 
-                                        self.scheduler_info, self.device)
+                                        self.scheduler_info, self.device, self.entropy_loss_included)
 
         critic = Critic(self.state_size, 
                         self.critic_hidden_size, self.critic_hidden_num,
@@ -125,7 +149,10 @@ class PPO():
                         gamma=self.gamma, gae_lambda=self.gae_lambda, # discount factor and GAE lambda
                         n_epochs=self.n_epochs, # number of epochs for updating the policy
                         actor=actor, critic=critic) # actor and critic networks
-        self.episodenum = paramdf['episodenum']
+
+        # create standarization tool
+        self.rms = FixedMeanStd(env) if self.standardize else None
+        #self.rms = RunningMeanStd(len(env.obsspace_dim), self.max_steps) if self.standardize else None
 
 
     def train(self):
@@ -135,34 +162,102 @@ class PPO():
         learn_iters = 0
         avg_score = 0
         n_steps = 0
-
-        for i in range(self.episodenum):
+        inttestscores = [] # interval test scores
+        for i_episode in range(1, self.episodenum + 1):
             observation = self.env.reset()
             done = False
             score = 0
             episteps = 0
             while not done:
-                action, prob, val = self.agent.choose_action(observation)
+                # STANDARDIZE OBS
+                observation = self.rms.normalize(self.env.obs) if self.standardize else self.env.obs
+                action, prob, val, ent = self.agent.choose_action(observation)
                 observation_, reward, done, info = self.env.step(action)
+                if self.standardize: # standardize
+                    self.rms.stored_batch.append(observation_) # store the state for running mean std calculation
+                    observation_ = self.rms.normalize(observation_)
+                    if self.rms.rolloutnum >= self.rms.updateN:
+                        self.rms.update()
+                    self.rms.rolloutnum += 1
                 n_steps += 1
                 score += reward
-                self.agent.remember(observation, action, prob, val, reward, done)
+                self.agent.remember(observation, action, prob, val, reward, done, ent)
                 if n_steps % self.rolloutlen == 0:
                     self.agent.learn()
+                    # step the learning rate schedulers if using exponential decay
+                    if isinstance(self.agent.actor.scheduler, ExponentialLR):
+                        self.agent.actor.scheduler.step() # Decay the learning rate
+                    if isinstance(self.agent.critic.scheduler, ExponentialLR):
+                        self.agent.critic.scheduler.step() # Decay the learning rate
                     learn_iters += 1
-                observation = observation_
                 episteps += 1
                 if episteps >= self.max_steps:
                     break
             score_history.append(score)
-            avg_score = numpy.mean(score_history[-100:])
+            avg_score = np.mean(score_history[-100:])
 
-            # is this really the best way to save?
+            # step the learning rate schedulers if using multistep or cosine annealing
+            if isinstance(self.agent.actor.scheduler, (MultiStepLR, CosineAnnealingLR)):
+                self.agent.actor.scheduler.step()
+            if isinstance(self.agent.critic.scheduler, (MultiStepLR, CosineAnnealingLR)):
+                self.agent.critic.scheduler.step()
+
+            # print out episode information every interval
+            if i_episode % 500 == 0:
+                print(f"Episode {i_episode}")
+            # evaluate at every specified interval episodes
+            if i_episode % self.evaluation_interval == 0: 
+                if self.parallel_testing:
+                    inttestscore = calc_performance_parallel(self.env, self.device, self.seed, self.paramdf['envconfig'], self.rms, self.fstack, self.actor_local, self.performance_sampleN, self.max_steps)
+                else:
+                    inttestscore = calc_performance(self.env,self.device,self.rms,self.fstack,self.actor_local,self.performance_sampleN,self.max_steps)
+                inttestscores.append(inttestscore)
+                actorpath = f"{self.testwd}/PolicyNetwork_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_{self.algorithmID}_episode{i_episode}.pt"
+                criticpath = f"{self.testwd}/ValueNetwork_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_{self.algorithmID}_episode{i_episode}.pt"
+                self.agent.save_models(actorpath, criticpath)
+            
+            # save the running mean and sd/var as well for this episode in pickle
+            if self.standardize:
+                with open(f"{self.testwd}/rms_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_{self.algorithmID}_episode{i_episode}.pkl", "wb") as file:
+                    pickle.dump(self.rms, file)
+            
+            critic_current_lr = self.agent.critic.optimizer.param_groups[0]['lr']
+            actor_current_lr = self.agent.actor.optimizer.param_groups[0]['lr']
+            print(f"Episode {i_episode}, Learning Rate: A{np.round(actor_current_lr, 6)}/C{np.round(critic_current_lr, 6)} Avg Performance: {inttestscore:.2f}")
+            print('-----------------------------------')
+
             if avg_score > best_score:
                 best_score = avg_score
-                self.agent.save_models()
+                print(f'(New best score: {best_score:.1f} at episode {i_episode})')
 
-            print('episode ', i, 'score %.1f' % score,
-                'average score %.1f' % avg_score,
-                'time_steps', learn_iters)
-        x = [i+1 for i in range(len(score_history))] 
+
+        ## save best model
+        bestidx = np.array(inttestscores).argmax()
+        if bestidx == len(inttestscores) - 1:
+            bestfilename = f"{self.testwd}/PolicyNetwork_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_TD3_episode_final.pt"
+            print(f'best Policy network found at final test')
+        else:
+            bestfilename = f"{self.testwd}/PolicyNetwork_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_TD3_episode{(bestidx+1)*self.evaluation_interval}.pt"
+            print(f'best Policy network found at episode {(bestidx+1)*self.evaluation_interval}')
+        shutil.copy(bestfilename, f"{self.testwd}/bestPolicyNetwork_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_TD3.pt")
+
+        ## save performance
+        np.save(f"{self.testwd}/rewards_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_TD3.npy", inttestscores)
+
+        ## lastly save the configuration.
+        param_file_path = os.path.join(self.testwd, f"config.txt")
+        with open(param_file_path, 'w') as param_file:
+            for key, value in self.paramdf.items():
+                param_file.write(f"{key}: {value}\n")
+        sorted_scores = np.sort(inttestscores)[::-1]
+
+        print("Training completed.")
+        
+        return self.agent.actor, sorted_scores
+    
+
+
+            #print('episode ', i_episode, 'score %.1f' % score,
+            #    'average score %.1f' % avg_score,
+            #    'time_steps', learn_iters)
+        #x = [i+1 for i in range(len(score_history))] 
