@@ -12,7 +12,6 @@ class PPOMemory:
         self.vals = []
         self.actions = []
         self.rewards = []
-        self.entropies = []
         self.dones = []
 
         self.minibatch_size = minibatch_size
@@ -28,19 +27,17 @@ class PPOMemory:
                 np.array(self.actions), \
                 np.array(self.probs), \
                 np.array(self.vals), \
-                np.array(self.entropies), \
                 np.array(self.rewards), \
                 np.array(self.dones), \
                 batches
     
-    def store_memory(self, state, prob, val, action, reward, done, entropy=None):
+    def store_memory(self, state, prob, val, action, reward, done):
         self.states.append(state)
         self.probs.append(prob)
         self.vals.append(val)
         self.actions.append(action)
         self.rewards.append(reward)
         self.dones.append(done)
-        self.entropies.append(entropy)
     
     def clear_memory(self):
         self.states = []
@@ -49,7 +46,6 @@ class PPOMemory:
         self.actions = []
         self.rewards = []
         self.dones = []
-        self.entropies = []
 
 class PPOAgent:
     def __init__(self, c1, c2, entropy_loss, 
@@ -71,34 +67,33 @@ class PPOAgent:
         self.memory = PPOMemory(minibatch_size)
         self.adv_normalization = adv_normalization
 
-    def remember(self, state, action, probs, vals, reward, done, entropy=None):
-        self.memory.store_memory(state, probs, vals, action, reward, done, entropy)
+    def remember(self, state, action, probs, vals, reward, done):
+        self.memory.store_memory(state, probs, vals, action, reward, done)
     
-    def save_checkpoint(self,path):
-        T.save(self, path)
+    def save_checkpoint(self, network,path):
+        T.save(network, path)
 
     def save_models(self,actorpath,criticpath):
-        self.actor.save_checkpoint(actorpath)
-        self.critic.save_checkpoint(criticpath)    
+        self.save_checkpoint(self.actor, actorpath)
+        self.save_checkpoint(self.critic, criticpath)
 
     def choose_action(self, observation):
         state = T.tensor([observation], dtype=T.float).to(self.actor.device)
         
-        action, logprob, entropy = self.actor.getaction(state)
+        action, logprob = self.actor.getaction(state)
         value = self.critic(state)
 
     
         probs = T.squeeze(logprob).item()
-        action = T.squeeze(action).item()
+        action = T.squeeze(action).cpu().detach().numpy()
         value = T.squeeze(value).item()
-        entropy = T.squeeze(entropy).item() if entropy is not None else None
 
-        return action, probs, value, entropy
+        return action, probs, value
 
     def learn(self):
         for _ in range(self.n_epochs):
             state_arr, action_arr, old_prob_arr, vals_arr,\
-            reward_arr, done_arr, entropy_arr, batches = \
+            reward_arr, done_arr, batches = \
                 self.memory.generate_batches()
             
             values = vals_arr
@@ -114,7 +109,7 @@ class PPOAgent:
             advantage = T.tensor(advantage).to(self.actor.device)
             # Advantage normalization (once per epoch, before minibatches)
             if self.adv_normalization:
-                advantage = (advantage - advantage.mean()) / (advantage.std(unbiased=False) + 1e-10)
+                normadvantage = (advantage - advantage.mean()) / (advantage.std(unbiased=False) + 1e-10)
 
             values = T.tensor(values).to(self.actor.device)
             for batch in batches:
@@ -128,8 +123,12 @@ class PPOAgent:
 
                 new_probs = self.actor.get_log_prob(states, actions)
                 prob_ratio = (new_probs - old_probs).exp()
-                weighted_probs = advantage[batch] * prob_ratio
-                weighted_clipped_probs = T.clamp(prob_ratio, 1 - self.policy_clip, 1 + self.policy_clip) * advantage[batch]
+                if self.adv_normalization:
+                    weighted_probs = normadvantage[batch] * prob_ratio
+                    weighted_clipped_probs = T.clamp(prob_ratio, 1 - self.policy_clip, 1 + self.policy_clip) * normadvantage[batch]
+                else:
+                    weighted_probs = advantage[batch] * prob_ratio
+                    weighted_clipped_probs = T.clamp(prob_ratio, 1 - self.policy_clip, 1 + self.policy_clip) * advantage[batch]
                 actor_loss = -T.min(weighted_probs, weighted_clipped_probs).mean()
 
                 returns = advantage[batch] + values[batch]
@@ -138,7 +137,8 @@ class PPOAgent:
 
                 total_loss = actor_loss + self.c1 * critic_loss
                 if self.entropy_loss:
-                    entropy_loss = -self.c2 * entropy_arr[batch].mean()
+                    current_entropy = self.actor.get_entropy(states)
+                    entropy_loss = -self.c2 * current_entropy.mean()
                     total_loss += entropy_loss
 
                 self.actor.optimizer.zero_grad()

@@ -73,18 +73,25 @@ class Actor_beta_dirichlet(nn.Module):
         dirichletlogprob = dirichletdist.log_prob(actions[:, 1:])
         logprob = betalogprob + dirichletlogprob
         return logprob
+
+    def get_entropy(self, states):
+        x = self.actor(states)
+        betadist, dirichletdist = self.getdist(x)
+        ent = betadist.entropy() + dirichletdist.entropy()
+        return ent
     
-    def getaction(self, state):
+    def getaction(self, state, get_action_only=False):
         x = self.actor(state)
         betadist, dirichletdist = self.getdist(x)
         # get action
-        action = np.concatenate([betadist.sample().cpu().detach().numpy(), dirichletdist.sample().cpu().detach().numpy()], axis=-1)
+        action = T.cat([betadist.sample().unsqueeze(1), dirichletdist.sample()], dim=1)
+        if get_action_only:
+            return action
         # get log prob
-        betalogprob = betadist.log_prob(action[0])
-        dirichletlogprob = dirichletdist.log_prob(action[1:])
+        betalogprob = betadist.log_prob(action[:, 0])
+        dirichletlogprob = dirichletdist.log_prob(action[:, 1:])
         logprob = betalogprob + dirichletlogprob
-        # get entropy
-        ent = betadist.entropy() + dirichletdist.entropy()  if self.entropy_loss else None
-        
-        return action, logprob, ent
+
+        return action, logprob
+    
 
