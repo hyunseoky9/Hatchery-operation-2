@@ -100,4 +100,14 @@ class Actor_beta_dirichlet(nn.Module):
         logprob = betadist.log_prob(a0) + dirichletdist.log_prob(a1)
         return action, logprob
     
+    def get_deterministic_action(self, state):
+        x = self.actor(state)
+        betadist, dirichletdist = self.getdist(x)
+
+        a0 = betadist.mean
+        a1 = dirichletdist.mean
+
+        action = T.cat([a0.unsqueeze(1), a1], dim=1)
+        return action
+    
 

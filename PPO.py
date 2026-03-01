@@ -118,6 +118,7 @@ class PPO():
         self.evaluation_interval = int(paramdf['evaluation_interval']) # evaluate every n episodes
         self.performance_sampleN = int(paramdf['performance_sampleN']) # number of episodes to sample for performance evaluation
         self.parallel_testing = bool(int(paramdf['parallel_testing'])) # whether to use parallel testing for performance evaluation
+        self.deterministic_eval = bool(int(paramdf['deterministic_eval'])) # whether to use deterministic policy for evaluation
 
         # print out the parameters
         print(f'paramID: {self.paramid}, iteration: {self.iteration}, seed: {self.seed}')
@@ -134,7 +135,7 @@ class PPO():
         print(f'KL stopping: {self.KL_stopping}, target KL: {self.target_KL}')
         print(f"c1: {self.c1}, c2: {self.c2}, entropy_loss_included: {self.entropy_loss_included}, policy_clip: {self.policy_clip}")
         print(f'rollout length: {self.rolloutlen}, minibatch size: {self.minibatch_size}, n_epochs: {self.n_epochs}')
-        print(f"evaluation interval: {self.evaluation_interval}, performance sampleN: {self.performance_sampleN}, parallel testing: {self.parallel_testing}")
+        print(f"evaluation interval: {self.evaluation_interval}, performance sampleN: {self.performance_sampleN}, parallel testing: {self.parallel_testing}, deterministic eval: {self.deterministic_eval}")
         print(f"max steps: {self.max_steps}, episodenum: {self.episodenum}")
 
         # create networks
@@ -229,9 +230,9 @@ class PPO():
             # evaluate at every specified interval episodes
             if i_episode % self.evaluation_interval == 0: 
                 if self.parallel_testing:
-                    inttestscore = calc_performance_parallel(self.env, self.device, self.seed, self.paramdf['envconfig'], self.rms, 1, self.agent.actor, self.performance_sampleN, self.max_steps)
+                    inttestscore = calc_performance_parallel(self.env, self.device, self.seed, self.paramdf['envconfig'], self.rms, 1, self.agent.actor, self.performance_sampleN, self.max_steps, self.deterministic_eval)
                 else:
-                    inttestscore = calc_performance(self.env,self.device,self.rms,1,self.agent.actor,self.performance_sampleN,self.max_steps)
+                    inttestscore = calc_performance(self.env,self.device,self.rms,1,self.agent.actor,self.performance_sampleN,self.max_steps,self.deterministic_eval)
                 inttestscores.append(inttestscore)
                 actorpath = f"{self.testwd}/PolicyNetwork_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_{self.algorithmID}_episode{i_episode}.pt"
                 criticpath = f"{self.testwd}/ValueNetwork_{self.env.envID}_par{self.env.parset}_dis{self.env.discset}_{self.algorithmID}_episode{i_episode}.pt"

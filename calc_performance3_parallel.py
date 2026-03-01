@@ -3,7 +3,8 @@ import random
 import numpy as np
 import torch
 import torch.multiprocessing as mp
-def calc_performance_parallel(env, device, seed, config, rms, fstack, policy=None, episodenum=1000, t_maxstep=1000):
+def calc_performance_parallel(env, device, seed, config, rms, fstack, policy=None, episodenum=1000,
+                                t_maxstep=1000, deterministic_eval=False):
     """
     same as calc_performance-parallel.py but built for PPO algorithms. 
     parallelized version
@@ -34,7 +35,10 @@ def calc_performance_parallel(env, device, seed, config, rms, fstack, policy=Non
     episodenum_perworker = episodenum_perworker + [int(episodenum - np.sum(episodenum_perworker))]
     # Spawn worker processes
     for worker_id in range(num_workers):
-        p = mp.Process(target=worker, args=(policy, episodenum_perworker[worker_id], rms, worker_id, envinit_params, t_maxstep, fstack, device, total_rewards,seed))
+        p = mp.Process(target=worker, args=(policy, episodenum_perworker[worker_id],
+                                            rms, worker_id, envinit_params,
+                                            t_maxstep, fstack, device,
+                                            total_rewards,seed, deterministic_eval))
         p.start()
         processes.append(p)
     
@@ -47,7 +51,8 @@ def calc_performance_parallel(env, device, seed, config, rms, fstack, policy=Non
 
 
 
-def worker(policy, workerepisodenum, rms, worker_id, envinit_params, t_maxstep, fstack, device, total_rewards,seed):
+def worker(policy, workerepisodenum, rms, worker_id, envinit_params, t_maxstep, fstack,
+            device, total_rewards,seed, deterministic_eval):
     # set seed
     worker_seed = seed + (worker_id + 1)
     random.seed(worker_seed)
@@ -71,7 +76,10 @@ def worker(policy, workerepisodenum, rms, worker_id, envinit_params, t_maxstep, 
 
             with torch.no_grad():                                   # <– no grads here
                 s = torch.as_tensor(stack.copy(), dtype=torch.float32, device=device).unsqueeze(0)
-                action = policy.getaction(s, get_action_only=True)
+                if deterministic_eval:
+                    action = policy.get_deterministic_action(s)
+                else:
+                    action = policy.get_action(s, get_action_only=True)
                 action = action.cpu().numpy().squeeze(0)
             _, reward, done, _ = env.step(action)
             rewards += reward
