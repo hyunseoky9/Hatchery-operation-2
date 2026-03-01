@@ -243,9 +243,9 @@ class PPO():
                 print(f"Episode {i_episode}, Learning Rate: A{np.round(actor_current_lr, 6)}/C{np.round(critic_current_lr, 6)} Avg Performance: {inttestscore:.2f}")
                 print('-----------------------------------')
 
-            if avg_score > best_score:
-                best_score = avg_score
-                print(f"(New best avg (last 100 epi's) score: {best_score:.1f} at episode {i_episode})")
+            #if avg_score > best_score:
+            #    best_score = avg_score
+            #    print(f"(New best avg (last 100 epi's) score: {best_score:.1f} at episode {i_episode})")
 
 
         ## save best model
