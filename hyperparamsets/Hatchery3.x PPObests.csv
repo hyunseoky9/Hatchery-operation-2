@@ -17,6 +17,8 @@ c1,0.5
 c2,0.01
 entropy_loss_included,0
 policy_clip,0.2
+KL_stopping,0
+target_KL,0.02
 minibatch_size,128
 rollout_len,1000
 n_epochs,6

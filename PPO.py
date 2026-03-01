@@ -107,6 +107,8 @@ class PPO():
         self.c2 = float(paramdf['c2']) # coefficient for entropy bonus
         self.entropy_loss_included = bool(int(paramdf['entropy_loss_included'])) # whether to include entropy loss in the total loss
         self.policy_clip = float(paramdf['policy_clip']) # clipping parameter for PPO
+        self.KL_stopping= bool(int(paramdf['KL_stopping'])) # whether to use KL divergence stopping criterion
+        self.target_KL = float(paramdf['target_KL']) # target KL divergence for adaptive KL penalty (if used)
 
         ## discounting and GAE lambda
         self.gamma = float(paramdf['gamma']) # discount factor
@@ -129,6 +131,7 @@ class PPO():
         print(f"standardize: {self.standardize}")
         print(f"gamma: {self.gamma}, gae_lambda: {self.gae_lambda}")
         print(f'advantage normalization: {self.advantage_normalization}')
+        print(f'KL stopping: {self.KL_stopping}, target KL: {self.target_KL}')
         print(f"c1: {self.c1}, c2: {self.c2}, entropy_loss_included: {self.entropy_loss_included}, policy_clip: {self.policy_clip}")
         print(f'rollout length: {self.rolloutlen}, minibatch size: {self.minibatch_size}, n_epochs: {self.n_epochs}')
         print(f"evaluation interval: {self.evaluation_interval}, performance sampleN: {self.performance_sampleN}, parallel testing: {self.parallel_testing}")
@@ -161,6 +164,7 @@ class PPO():
                         gamma=self.gamma, gae_lambda=self.gae_lambda, # discount factor and GAE lambda
                         n_epochs=self.n_epochs, # number of epochs for updating the policy
                         adv_normalization=self.advantage_normalization, # whether to normalize advantages
+                        KL_stopping=self.KL_stopping, target_KL=self.target_KL, # whether to use KL stopping and the target KL value
                         actor=actor, critic=critic) # actor and critic networks
 
         # create standarization tool

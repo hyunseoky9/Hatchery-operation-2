@@ -54,6 +54,7 @@ class PPOAgent:
                  gamma, gae_lambda,
                  n_epochs,
                  adv_normalization,
+                 KL_stopping, target_KL,
                  actor, critic):
         self.gamma = gamma
         self.gae_lambda = gae_lambda
@@ -64,6 +65,8 @@ class PPOAgent:
         self.entropy_loss = entropy_loss
         self.actor = actor
         self.critic = critic
+        self.KL_stopping = KL_stopping
+        self.target_KL = target_KL
         self.memory = PPOMemory(minibatch_size)
         self.adv_normalization = adv_normalization
 
@@ -151,6 +154,10 @@ class PPOAgent:
             if self.adv_normalization:
                 advantages = (advantages - advantages.mean()) / (advantages.std(ddof=0) + 1e-10)
 
+            kl_running = 0.0
+            kl_count = 0
+            stop_early = False
+
             for batch in batches:
                 # convert batch data to tensors
                 states = T.tensor(state_arr[batch], dtype=T.float).to(self.actor.device)
@@ -162,6 +169,10 @@ class PPOAgent:
                 # calculate new log probs with new network
                 new_probs = self.actor.get_log_prob(states, actions)
                 prob_ratio = (new_probs - old_probs).exp()
+                # KL estimate
+                approx_kl = (old_probs - new_probs).mean()
+                kl_running += approx_kl.item()
+                kl_count += 1
                 # get advantages and returns for the minibatch and convert to tensors
                 advantage = T.tensor(advantages[batch], dtype=T.float, device=self.actor.device)
                 returns_t = T.tensor(returns[batch], dtype=T.float, device=self.actor.device)
@@ -184,4 +195,13 @@ class PPOAgent:
                 total_loss.backward()
                 self.actor.optimizer.step()
                 self.critic.optimizer.step()
+
+                # KL early stopping check 
+                if (self.KL_stopping) and (approx_kl.item() > self.target_KL):
+                    stop_early = True
+                    break
+            if stop_early:
+                break
+
+
         self.memory.clear_memory() # clear memory after learning is done before next round of data collection
