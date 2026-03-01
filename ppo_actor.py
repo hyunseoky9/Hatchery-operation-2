@@ -66,13 +66,18 @@ class Actor_beta_dirichlet(nn.Module):
         dirichletdist = Dirichlet(c)
         return betadist, dirichletdist
     
+    def _clamp_and_project_simplex(self, a_simplex):
+        a_simplex = a_simplex.clamp(min=1e-6)  # Clamp to avoid numerical issues
+        a_simplex = a_simplex / a_simplex.sum(dim=-1, keepdim=True)
+        return a_simplex
+    
     def get_log_prob(self, states, actions):
         x = self.actor(states)
         betadist, dirichletdist = self.getdist(x)
-        betalogprob = betadist.log_prob(actions[:, 0])
-        dirichletlogprob = dirichletdist.log_prob(actions[:, 1:])
-        logprob = betalogprob + dirichletlogprob
-        return logprob
+        a0 = actions[:, 0].clamp(1e-6, 1.0 - 1e-6)
+        a1 = self._clamp_and_project_simplex(actions[:, 1:])
+
+        return betadist.log_prob(a0) + dirichletdist.log_prob(a1)
 
     def get_entropy(self, states):
         x = self.actor(states)
@@ -83,15 +88,16 @@ class Actor_beta_dirichlet(nn.Module):
     def getaction(self, state, get_action_only=False):
         x = self.actor(state)
         betadist, dirichletdist = self.getdist(x)
-        # get action
-        action = T.cat([betadist.sample().unsqueeze(1), dirichletdist.sample()], dim=1)
+
+        a0 = betadist.sample().clamp(1e-6, 1.0 - 1e-6)
+        a1 = self._clamp_and_project_simplex(dirichletdist.sample())
+
+        action = T.cat([a0.unsqueeze(1), a1], dim=1)
+
         if get_action_only:
             return action
-        # get log prob
-        betalogprob = betadist.log_prob(action[:, 0])
-        dirichletlogprob = dirichletdist.log_prob(action[:, 1:])
-        logprob = betalogprob + dirichletlogprob
 
+        logprob = betadist.log_prob(a0) + dirichletdist.log_prob(a1)
         return action, logprob
     
 

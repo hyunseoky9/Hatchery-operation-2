@@ -75,10 +75,11 @@ class PPOAgent:
 
     def save_models(self,actorpath,criticpath):
         self.save_checkpoint(self.actor, actorpath)
-        self.save_checkpoint(self.critic, criticpath)
+        #self.save_checkpoint(self.critic, criticpath)
 
     def choose_action(self, observation):
-        state = T.tensor([observation], dtype=T.float).to(self.actor.device)
+        state = T.tensor(observation, dtype=T.float).unsqueeze(0).to(self.actor.device)
+
         
         action, logprob = self.actor.getaction(state)
         value = self.critic(state)
@@ -90,6 +91,43 @@ class PPOAgent:
 
         return action, probs, value
 
+    def compute_gae_1d(self, rewards,values,dones,gamma ,lam ,last_value=0.0):
+        """
+        O(T) GAE(λ) for a single trajectory or a concatenated rollout.
+
+        Args:
+            rewards: shape [T]
+            values:  shape [T]  (V(s_t) stored during rollout)
+            dones:   shape [T]  (1 if terminal at t else 0)
+            gamma: discount factor
+            lam: GAE lambda
+            last_value: V(s_{T}) for bootstrapping the final step if not terminal.
+                        If you don't have V(s_T), pass 0 and this still behaves sensibly.
+
+        Returns:
+            advantages: shape [T]
+            returns:    shape [T] where returns = advantages + values (GAE-style target)
+        """
+        T_len = len(rewards)
+        advantages = np.zeros(T_len, dtype=np.float32)
+
+        gae = 0.0
+        for t in reversed(range(T_len)):
+            nonterminal = 1.0 - float(dones[t])
+
+            next_value = last_value if t == T_len - 1 else values[t + 1]
+
+            delta = rewards[t] + gamma * next_value * nonterminal - values[t]
+            gae = delta + gamma * lam * nonterminal * gae
+            advantages[t] = gae
+
+            # If this timestep ended an episode, reset the accumulator
+            if dones[t]:
+                gae = 0.0
+
+        returns = advantages + values.astype(np.float32)
+        return advantages, returns
+
     def learn(self):
         for _ in range(self.n_epochs):
             state_arr, action_arr, old_prob_arr, vals_arr,\
@@ -97,53 +135,53 @@ class PPOAgent:
                 self.memory.generate_batches()
             
             values = vals_arr
-            advantage = np.zeros(len(reward_arr), dtype=np.float32)
-
-            for t in range(len(reward_arr)- 1):
-                discount = 1
-                a_t = 0
-                for k in range(t, len(reward_arr) - 1):
-                    a_t += discount * (reward_arr[k] + self.gamma * values[k+1] * (1 - int(done_arr[k])) - values[k])
-                    discount *= self.gamma * self.gae_lambda
-                advantage[t] = a_t
-            advantage = T.tensor(advantage).to(self.actor.device)
+            last_value = 0
+            advantages, returns = self.compute_gae_1d(reward_arr,values,done_arr,
+                                                      self.gamma,self.gae_lambda,last_value)
+            #advantage = np.zeros(len(reward_arr), dtype=np.float32)
+            #for t in range(len(reward_arr)- 1):
+            #    discount = 1
+            #    a_t = 0
+            #    for k in range(t, len(reward_arr) - 1):
+            #        a_t += discount * (reward_arr[k] + self.gamma * values[k+1] * (1 - int(done_arr[k])) - values[k])
+            #        discount *= self.gamma * self.gae_lambda
+            #    advantage[t] = a_t
+            #advantage = T.tensor(advantage).to(self.actor.device)
             # Advantage normalization (once per epoch, before minibatches)
             if self.adv_normalization:
-                normadvantage = (advantage - advantage.mean()) / (advantage.std(unbiased=False) + 1e-10)
+                advantages = (advantages - advantages.mean()) / (advantages.std(ddof=0) + 1e-10)
 
-            values = T.tensor(values).to(self.actor.device)
             for batch in batches:
+                # convert batch data to tensors
                 states = T.tensor(state_arr[batch], dtype=T.float).to(self.actor.device)
                 old_probs = T.tensor(old_prob_arr[batch]).to(self.actor.device)
                 actions = T.tensor(action_arr[batch]).to(self.actor.device)
-
+                # calculate critic value with new network
                 critic_value = self.critic(states)
-
                 critic_value = T.squeeze(critic_value)
-
+                # calculate new log probs with new network
                 new_probs = self.actor.get_log_prob(states, actions)
                 prob_ratio = (new_probs - old_probs).exp()
-                if self.adv_normalization:
-                    weighted_probs = normadvantage[batch] * prob_ratio
-                    weighted_clipped_probs = T.clamp(prob_ratio, 1 - self.policy_clip, 1 + self.policy_clip) * normadvantage[batch]
-                else:
-                    weighted_probs = advantage[batch] * prob_ratio
-                    weighted_clipped_probs = T.clamp(prob_ratio, 1 - self.policy_clip, 1 + self.policy_clip) * advantage[batch]
+                # get advantages and returns for the minibatch and convert to tensors
+                advantage = T.tensor(advantages[batch], dtype=T.float, device=self.actor.device)
+                returns_t = T.tensor(returns[batch], dtype=T.float, device=self.actor.device)
+                # calculate actor loss
+                weighted_probs = advantage * prob_ratio
+                weighted_clipped_probs = T.clamp(prob_ratio, 1 - self.policy_clip, 1 + self.policy_clip) * advantage
                 actor_loss = -T.min(weighted_probs, weighted_clipped_probs).mean()
-
-                returns = advantage[batch] + values[batch]
-                critic_loss = (returns - critic_value) ** 2
-                critic_loss = critic_loss.mean()
-
+                # calculate critic loss
+                critic_loss = (returns_t - critic_value).pow(2).mean()
+                # calculate total loss
                 total_loss = actor_loss + self.c1 * critic_loss
+                # add entropy loss if using
                 if self.entropy_loss:
                     current_entropy = self.actor.get_entropy(states)
                     entropy_loss = -self.c2 * current_entropy.mean()
                     total_loss += entropy_loss
-
+                # take a gradient step
                 self.actor.optimizer.zero_grad()
                 self.critic.optimizer.zero_grad()
                 total_loss.backward()
                 self.actor.optimizer.step()
                 self.critic.optimizer.step()
-        self.memory.clear_memory()  
+        self.memory.clear_memory() # clear memory after learning is done before next round of data collection

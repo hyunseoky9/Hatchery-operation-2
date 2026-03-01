@@ -171,7 +171,7 @@ class PPO():
     def train(self):
         best_score = 0
         score_history = []
-
+        self.did_first_update = False # flag to indicate if the first update has been done, used for learning rate scheduler stepping
         learn_iters = 0
         avg_score = 0
         n_steps = 0
@@ -184,11 +184,11 @@ class PPO():
             while not done:
                 # STANDARDIZE OBS
                 observation = self.rms.normalize(self.env.obs) if self.standardize else self.env.obs
-                action, prob, val = self.agent.choose_action(observation)
+                with torch.no_grad():
+                    action, prob, val = self.agent.choose_action(observation)
                 observation_, reward, done, info = self.env.step(action)
                 if self.standardize: # standardize
                     self.rms.stored_batch.append(observation_) # store the state for running mean std calculation
-                    observation_ = self.rms.normalize(observation_)
                     if self.rms.rolloutnum >= self.rms.updateN:
                         self.rms.update()
                     self.rms.rolloutnum += 1
@@ -197,6 +197,8 @@ class PPO():
                 self.agent.remember(observation, action, prob, val, reward, done)
                 if n_steps % self.rolloutlen == 0:
                     self.agent.learn()
+                    if not self.did_first_update:
+                        self.did_first_update = True
                     # step the learning rate schedulers if using exponential decay
                     if isinstance(self.agent.actor.scheduler, ExponentialLR):
                         self.agent.actor.scheduler.step() # Decay the learning rate
@@ -210,14 +212,16 @@ class PPO():
             avg_score = np.mean(score_history[-100:])
 
             # step the learning rate schedulers if using multistep or cosine annealing
-            if isinstance(self.agent.actor.scheduler, (MultiStepLR, CosineAnnealingLR)):
-                self.agent.actor.scheduler.step()
-            if isinstance(self.agent.critic.scheduler, (MultiStepLR, CosineAnnealingLR)):
-                self.agent.critic.scheduler.step()
+            if self.did_first_update:
+                if isinstance(self.agent.actor.scheduler, (MultiStepLR, CosineAnnealingLR)):
+                    self.agent.actor.scheduler.step()
+                if isinstance(self.agent.critic.scheduler, (MultiStepLR, CosineAnnealingLR)):
+                    self.agent.critic.scheduler.step()
 
             # print out episode information every interval
             if i_episode % 500 == 0:
                 print(f"Episode {i_episode}")
+
             # evaluate at every specified interval episodes
             if i_episode % self.evaluation_interval == 0: 
                 if self.parallel_testing:
@@ -241,7 +245,7 @@ class PPO():
 
             if avg_score > best_score:
                 best_score = avg_score
-                print(f'(New best score: {best_score:.1f} at episode {i_episode})')
+                print(f"(New best avg (last 100 epi's) score: {best_score:.1f} at episode {i_episode})")
 
 
         ## save best model

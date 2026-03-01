@@ -13,6 +13,7 @@ DDPG results/
 TD3 results/
 DRQN results/
 a3c results/
+PPO_results/
 rayrllib results/
 figures/
 manuscript_results/ 
@@ -20,6 +21,7 @@ pomdp/
 human_play_results/
 ericyangyuppo/
 .vscode/
+
 # Ignore Python cache files and directories
 __pycache__/
 *.pyc
