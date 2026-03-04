@@ -67,8 +67,8 @@ class PPO():
 
         # parameters
         ## NN parameters
-        self.state_size = self.env.obsspace_dim
-        self.action_size = self.env.actionspace_dim
+        self.state_size = len(self.env.obsspace_dim) if type(self.env.obsspace_dim) == list else self.env.obsspace_dim 
+        self.action_size = len(self.env.actionspace_dim) if type(self.env.actionspace_dim) == list else self.env.actionspace_dim
         self.actor_hidden_num = int(paramdf['actor_hidden_num']) # number of hidden layers in the actor network
         self.actor_hidden_size = eval(paramdf['actor_hidden_size']) # size of hidden layers in the actor network
         self.critic_hidden_num = int(paramdf['critic_hidden_num']) # number of hidden layers in the critic network for trunk
